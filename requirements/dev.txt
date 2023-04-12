@@ -4,173 +4,229 @@
 #
 #    pip-compile --output-file=requirements/dev.txt requirements/dev.in
 #
--e .
+-e git+https://github.com/kytos-ng/kytos.git#egg=kytos
     # via -r requirements/dev.in
--e git+https://github.com/kytos-ng/sphinx-theme.git#egg=kytos-sphinx-theme
+-e file:///home/alopalao/Desktop/up/of_multi_table
     # via -r requirements/dev.in
 -e git+https://github.com/kytos-ng/python-openflow.git#egg=python-openflow
-    # via -r requirements/dev.in
-alabaster==0.7.13
-    # via sphinx
-astroid==2.15.2
+    # via
+    #   -r requirements/dev.in
+    #   kytos
+astroid==2.12.9
     # via pylint
-attrs==22.2.0
+attrs==21.4.0
     # via pytest
-babel==2.12.1
-    # via sphinx
-build==0.10.0
-    # via pip-tools
-cachetools==5.3.0
-    # via tox
-certifi==2022.12.7
+backcall==0.1.0
+    # via
+    #   ipython
+    #   kytos
+certifi==2021.10.8
     # via
     #   kytos-of-multi-table
     #   requests
-chardet==5.1.0
-    # via tox
 charset-normalizer==2.0.10
     # via
     #   kytos-of-multi-table
     #   requests
 click==8.1.3
-    # via pip-tools
-colorama==0.4.6
     # via
-    #   sphinx-autobuild
-    #   tox
-coverage[toml]==7.2.3
-    # via pytest-cov
-dill==0.3.6
+    #   flask
+    #   kytos
+    #   pip-tools
+coverage[toml]==6.2
+    # via pytes-cov
+decorator==4.4.2
+    # via
+    #   ipython
+    #   kytos
+    #   traitlets
+dill==0.3.4
     # via pylint
-distlib==0.3.6
+distlib==0.3.4
     # via virtualenv
 docopt==0.6.2
     # via yala
 docutils==0.19
-    # via sphinx
-filelock==3.11.0
+    # via
+    #   kytos
+    #   python-daemon
+filelock==3.4.1
     # via
     #   tox
     #   virtualenv
-idna==3.4
+flask[async]==2.1.3
+    # via
+    #   flask-cors
+    #   flask-socketio
+    #   kytos
+flask-cors==3.0.10
+    # via kytos
+flask-socketio==5.2.0
+    # via kytos
+idna==3.3
     # via
     #   kytos-of-multi-table
     #   requests
-imagesize==1.4.1
-    # via sphinx
-importlib-metadata==6.3.0
-    # via sphinx
-iniconfig==2.0.0
+iniconfig==1.1.1
     # via pytest
-isort==5.12.0
+ipython==8.1.1
+    # via kytos
+ipython-genutils==0.2.0
+    # via
+    #   kytos
+    #   traitlets
+isort==5.10.1
     # via
     #   pylint
     #   yala
-jinja2==3.1.2
-    # via sphinx
-lazy-object-proxy==1.9.0
-    # via astroid
-livereload==2.6.3
-    # via sphinx-autobuild
-markupsafe==2.1.2
-    # via jinja2
-mccabe==0.7.0
-    # via pylint
-packaging==23.0
+itsdangerous==2.1.2
     # via
-    #   build
-    #   pyproject-api
+    #   flask
+    #   kytos
+janus==1.0.0
+    # via kytos
+jedi==0.16.0
+    # via
+    #   ipython
+    #   kytos
+jinja2==3.1.2
+    # via
+    #   flask
+    #   kytos
+lazy-object-proxy==1.7.1
+    # via astroid
+lockfile==0.12.2
+    # via
+    #   kytos
+    #   python-daemon
+markupsafe==2.1.1
+    # via
+    #   jinja2
+    #   kytos
+mccabe==0.6.1
+    # via pylint
+packaging==21.3
+    # via
     #   pytest
-    #   sphinx
     #   tox
-pip-tools==6.13.0
+parso==0.6.2
+    # via
+    #   jedi
+    #   kytos
+pathtools==0.1.2
+    # via
+    #   kytos
+    #   watchdog
+pep517==0.12.0
+    # via pip-tools
+pexpect==4.8.0
+    # via
+    #   ipython
+    #   kytos
+pickleshare==0.7.5
+    # via
+    #   ipython
+    #   kytos
+pip-tools==6.4.0
     # via kytos-of-multi-table
-platformdirs==3.2.0
+platformdirs==2.4.0
     # via
     #   pylint
-    #   tox
     #   virtualenv
 pluggy==1.0.0
     # via
     #   pytest
     #   tox
+prompt-toolkit==3.0.5
+    # via
+    #   ipython
+    #   kytos
+ptyprocess==0.6.0
+    # via
+    #   kytos
+    #   pexpect
 py==1.11.0
-    # via pytest
-pycodestyle==2.10.0
+    # via
+    #   pytest
+    #   tox
+pycodestyle==2.8.0
     # via yala
-pygments==2.15.0
-    # via sphinx
-pylint==2.17.2
+pygments==2.13.0
+    # via
+    #   ipython
+    #   kytos
+pyjwt==2.4.0
+    # via kytos
+pylint==2.15.0
     # via yala
-pyproject-api==1.5.1
-    # via tox
-pyproject-hooks==1.0.0
-    # via build
 pytest==7.0.0
     # via
     #   kytos-of-multi-table
     #   pytest-cov
 pytest-cov==3.0.0
     # via kytos-of-multi-table
+python-daemon==2.3.1
+    # via kytos
+python-engineio==4.3.4
+    # via
+    #   kytos
+    #   python-socketio
+python-socketio==5.7.1
+    # via
+    #   flask-socketio
+    #   kytos
 requests==2.27.0
-    # via
-    #   kytos-of-multi-table
-    #   sphinx
-six==1.16.0
-    # via livereload
-snowballstemmer==2.2.0
-    # via sphinx
-sphinx==6.1.3
-    # via
-    #   kytos-sphinx-theme
-    #   sphinx-autobuild
-sphinx-autobuild==2021.3.14
-    # via kytos-sphinx-theme
-sphinxcontrib-applehelp==1.0.4
-    # via sphinx
-sphinxcontrib-devhelp==1.0.2
-    # via sphinx
-sphinxcontrib-htmlhelp==2.0.1
-    # via sphinx
-sphinxcontrib-jsmath==1.0.1
-    # via sphinx
-sphinxcontrib-qthelp==1.0.3
-    # via sphinx
-sphinxcontrib-serializinghtml==1.1.5
-    # via sphinx
-tomli==2.0.1
-    # via
-    #   build
-    #   coverage
-    #   pylint
-    #   pyproject-api
-    #   pyproject-hooks
-    #   pytest
-    #   tox
-tomlkit==0.11.7
-    # via pylint
-tornado==6.2
-    # via livereload
-tox==4.4.11
     # via kytos-of-multi-table
+six==1.16.0
+    # via
+    #   flask-cors
+    #   kytos
+    #   python-engineio
+    #   python-socketio
+    #   tox
+    #   traitlets
+toml==0.10.2
+    # via tox
+tomli==1.2.3
+    # via
+    #   coverage
+    #   pep517
+    #   pylint
+    #   pytest
+tomlkit==0.11.4
+    # via pylint
+tox==3.24.5
+    # via kytos-of-multi-table
+traitlets==5.3.0
+    # via
+    #   ipython
+    #   kytos
 typing-extensions==4.5.0
     # via
     #   astroid
     #   pylint
-urllib3==1.26.15
+urllib3==1.26.7
     # via
     #   kytos-of-multi-table
     #   requests
-virtualenv==20.21.0
+virtualenv==20.13.0
     # via tox
-wheel==0.40.0
+watchdog==2.1.9
+    # via kytos
+wcwidth==0.1.9
+    # via
+    #   kytos
+    #   prompt-toolkit
+werkzeug==2.0.3
+    # via
+    #   flask
+    #   kytos
+wheel==0.37.1
     # via pip-tools
-wrapt==1.15.0
+wrapt==1.13.3
     # via astroid
-yala==3.2.0
+yala==3.1.0
     # via kytos-of-multi-table
-zipp==3.15.0
-    # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip

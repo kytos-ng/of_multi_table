@@ -5,8 +5,6 @@ This NApp implements Oplenflow multi tables
 
 from kytos.core import KytosNApp, log
 
-from napps.kytos.of_multi_table import settings
-
 
 class Main(KytosNApp):
     """Main class of kytos/of_multi_table NApp.
@@ -22,7 +20,7 @@ class Main(KytosNApp):
 
         So, if you have any setup routine, insert it here.
         """
-        pass
+        log.info("Setup from of_multi_table")
 
     def execute(self):
         """Run after the setup method execution.
@@ -32,11 +30,11 @@ class Main(KytosNApp):
 
             self.execute_as_loop(30)  # 30-second interval.
         """
-        pass
+        log.info("Executing of_multi_table")
 
     def shutdown(self):
         """Run when your NApp is unloaded.
 
         If you have some cleanup procedure, insert it here.
         """
-        pass
+        log.info("Shutting down of_multi_table")

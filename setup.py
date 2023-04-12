@@ -132,14 +132,16 @@ class Linter(SimpleCommand):
         """Run Yala."""
         print("Yala is running. It may take several seconds...")
         try:
-            cmd = "yala *.py tests controllers db models"
+            cmd = "yala *.py tests"
             check_call(cmd, shell=True)
             print("No linter error found.")
-        except CalledProcessError:
+        except RuntimeError as error:
             print("Linter check failed. Fix the error(s) above and try again.")
+            print(error)
             sys.exit(-1)
 
 
+# pylint: disable=too-few-public-methods
 class KytosInstall:
     """Common code for all install types."""
 
@@ -269,19 +271,19 @@ setup(
     name=f"kytos_{NAPP_NAME}",
     version=read_version_from_json(),
     description="This NApp implements Oplenflow multi tables",
-    url="http://github.com/kytos/{NAPP_NAME}",
-    author="Kytos Team",
+    url="http://github.com/kytos-ng/of_multi_table",
+    author="kytos Team",
     author_email="of-ng-dev@ncc.unesp.br",
     license="MIT",
-    install_requires=read_requirements() + ["setuptools >= 36.0.1"],
+    install_requires=read_requirements() + ["setuptools >= 59.6.0"],
     packages=[],
     extras_require={
         "dev": [
             "pytest==7.0.0",
             "pytest-cov==3.0.0",
-            "pip-tools",
+            "pip-tools==6.6.0",
             "yala",
-            "tox",
+            "tox==3.24.5",
         ],
     },
     cmdclass={
@@ -297,6 +299,7 @@ setup(
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Operating System :: POSIX :: Linux",
+        "Programming Language :: Python :: 3.9",
         "Topic :: System :: Networking",
     ],
 )
