@@ -6,7 +6,7 @@
 #
 -e git+https://github.com/kytos-ng/kytos.git#egg=kytos
     # via -r requirements/dev.in
--e file:///home/alopalao/Desktop/up/of_multi_table
+-e .
     # via -r requirements/dev.in
 -e git+https://github.com/kytos-ng/python-openflow.git#egg=python-openflow
     # via
