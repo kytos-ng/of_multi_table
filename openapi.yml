@@ -1,0 +1,163 @@
+openapi: 3.0.0
+info:
+  version: '1.0'
+  title: Manager of Openflow pipelines
+  description: Kytos NApp to manage pipelines on the topology
+servers:
+  - url: /api/kytos/of_multi_table
+paths:
+  /v1/pipeline:
+    get:
+      summary: Get pipelines
+      description: Get a list of pipelines
+      operationId: list_pipelines
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Add pipeline
+      operationId: add_pipeline
+      requestBody:
+        description: Creates a new pipeline.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPipeline'
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Request do not have a valid JSON.
+        '415':
+          description: The request body mimetype is not application/json.
+
+  /v1/pipeline/{pipeline_id}:
+    get:
+      summary: Get a pipeline
+      description: Get a single pipeline
+      operationId: get_pipeline
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: Delete pipepline
+      description: Delete a pipeline. The pipeline should be disabled.
+      operationId: delete_pipeline
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+
+  /v1/pipeline/{pipeline_id}/enable:
+    post:
+      summary: Enable a pipeline
+      description: Apply the pipeline configuration to the topology
+      operationId: enable_pipeline
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: OK
+
+  /v1/pipeline/{pipeline_id}/disable:
+    post:
+      summary: Disable a pipeline
+      description: Disable the pipeline and return to the default pipeline
+      operationId: disable_pipeline
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: OK
+
+
+components:
+  #-------------------------------
+  # Reusable schemas (data models)
+  #-------------------------------
+  schemas:
+    NewPipeline: # Can be referenced via '#/components/schemas/NewPipeline'
+      type: object
+      required:
+        - multi_table
+      properties:
+        multi_table: {
+          "$ref": "#/components/schemas/MultiTable"
+        }
+        status:
+          type: string
+    
+    MultiTable: # Can be referenced via '#/components/schemas/MultiTable'
+      type: array
+      minItems: 1
+      items:
+        "$ref": "#/components/schemas/Table"
+    
+    Table: # Can be referenced via '#/components/schemas/MultiTable'
+      type: object
+      properties:
+        description:
+          type: string
+        table_miss_flow:
+          type: object
+          required:
+            - instructions
+          properties:
+            instructions:
+              type: array
+              items:
+                type: object
+            priority:
+              type: integer
+              format: int32
+            match:
+              type: object
+        napps_table_groups:
+          type: object
+          properties:
+            telemetry_int:
+              type: array
+              items: 
+                type: string
+                enum:
+                  - base
+            mef_eline:
+              type: array
+              items: 
+                type: string
+                enum:
+                  - base
+                  - epl
+                  - evpl
+            coloring:
+              type: array
+              items: 
+                type: string
+                enum:
+                  - base
+            of_lldp:
+              type: array
+              items: 
+                type: string
+                enum:
+                  - base
