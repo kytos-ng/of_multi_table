@@ -37,22 +37,22 @@ class Main(KytosNApp):
     @validate_openapi(spec)
     def add_pipeline(self, data):
         """Add pipeline"""
-        return jsonify("Operation successful"), 200
+        return jsonify("Operation successful"), 201
 
     @rest("/v1/pipeline", methods=["GET"])
     def list_pipelines(self):
         """List pipelines"""
-        return jsonify("Operation successful"), 200
+        return jsonify("Operation successful"), 201
 
     @rest("/v1/pipeline/<pipeline_id>", methods=["GET"])
     def get_pipeline(self, pipeline_id):
         """Get pipeline by pipeline_id"""
-        return jsonify("Operation successful"), 200
+        return jsonify("Operation successful"), 201
 
     @rest("/v1/pipeline/<pipeline_id>", methods=["DELETE"])
     def delete_pipeline(self, pipeline_id):
         """Delete pipeline by pipeline_id"""
-        return jsonify("Operation successful"), 200
+        return jsonify("Operation successful"), 201
 
     @rest("/v1/pipeline/<pipeline_id>/enable", methods=["POST"])
     def enable_pipeline(self, pipeline_id):

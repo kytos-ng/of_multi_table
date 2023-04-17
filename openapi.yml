@@ -102,62 +102,59 @@ components:
         - multi_table
       properties:
         multi_table: {
-          "$ref": "#/components/schemas/MultiTable"
+          "$ref": "#/components/schemas/Pipeline"
         }
         status:
           type: string
     
-    MultiTable: # Can be referenced via '#/components/schemas/MultiTable'
+    Pipeline: # Can be referenced via '#/components/schemas/Pipeline'
       type: array
       minItems: 1
       items:
-        "$ref": "#/components/schemas/Table"
-    
-    Table: # Can be referenced via '#/components/schemas/MultiTable'
-      type: object
-      properties:
-        description:
-          type: string
-        table_miss_flow:
-          type: object
-          required:
-            - instructions
-          properties:
-            instructions:
-              type: array
-              items:
+        type: object
+        properties:
+          description:
+            type: string
+          table_miss_flow:
+            type: object
+            required:
+              - instructions
+            properties:
+              instructions:
+                type: array
+                items:
+                  type: object
+              priority:
+                type: integer
+                format: int32
+              match:
                 type: object
-            priority:
-              type: integer
-              format: int32
-            match:
-              type: object
-        napps_table_groups:
-          type: object
-          properties:
-            telemetry_int:
-              type: array
-              items: 
-                type: string
-                enum:
-                  - base
-            mef_eline:
-              type: array
-              items: 
-                type: string
-                enum:
-                  - base
-                  - epl
-                  - evpl
-            coloring:
-              type: array
-              items: 
-                type: string
-                enum:
-                  - base
-            of_lldp:
-              type: array
-              items: 
-                type: string
-                enum:
-                  - base
+          napps_table_groups:
+            type: object
+            properties:
+              telemetry_int:
+                type: array
+                items: 
+                  type: string
+                  enum:
+                    - base
+              mef_eline:
+                type: array
+                items: 
+                  type: string
+                  enum:
+                    - base
+                    - epl
+                    - evpl
+              coloring:
+                type: array
+                items: 
+                  type: string
+                  enum:
+                    - base
+              of_lldp:
+                type: array
+                items: 
+                  type: string
+                  enum:
+                    - base
