@@ -12,7 +12,7 @@ from werkzeug.exceptions import NotFound
 from kytos.core.db import Mongo
 from kytos.core.retry import before_sleep, for_all_methods, retries
 
-from ..db.models import PipelineBaseDoc
+from napps.kytos.of_multi_table.db.models import PipelineBaseDoc
 
 
 @for_all_methods(
@@ -51,7 +51,7 @@ class PipelineController:
             raise err
         return _id
     
-    def get_pipelines(self, status: str) -> dict:
+    def get_pipelines(self, status: str = None) -> dict:
         """Get a list of pipelines"""
         match_filters = {"$match": {}}
         if status:
