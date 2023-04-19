@@ -11,9 +11,23 @@ paths:
       summary: Get pipelines
       description: Get a list of pipelines
       operationId: list_pipelines
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: "Filter pipelines by status value"
+          required: false
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                items:
+                  $ref: '#/components/schemas/StoredPipeline'
+
     post:
       summary: Add pipeline
       operationId: add_pipeline
@@ -46,6 +60,12 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredPipeline'
+        '404':
+          description: Pipeline id not found.
     delete:
       summary: Delete pipepline
       description: Delete a pipeline. The pipeline should be disabled.
@@ -110,9 +130,14 @@ components:
     Pipeline: # Can be referenced via '#/components/schemas/Pipeline'
       type: array
       minItems: 1
+      required:
+        - table_id
       items:
         type: object
         properties:
+          table_id:
+            type: integer
+            format: int32
           description:
             type: string
           table_miss_flow:
@@ -158,3 +183,24 @@ components:
                   type: string
                   enum:
                     - base
+    StoredPipeline: # Can be referenced via '#/components/schemas/StoredPipeline'
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+        inserted_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        multi_table:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pipeline'
+        status:
+          type: string
+          enum:
+            - disabled
+            - enabled

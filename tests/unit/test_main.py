@@ -1,4 +1,6 @@
 """Test the Main class"""
+from unittest.mock import MagicMock
+
 from kytos.lib.helpers import get_controller_mock, get_test_client
 from napps.kytos.of_multi_table.main import Main
 
@@ -10,6 +12,7 @@ class TestMain():
 
     def setup_method(self):
         """Execute steps before each test"""
+        Main.get_pipeline_controller = MagicMock()
         self.napp = Main(get_controller_mock())
 
     def test_add_pipeline(self):
@@ -17,6 +20,7 @@ class TestMain():
         payload = {
             "status": "disabled",
             "multi_table": [{
+                    "table_id": 0,
                     "description": "Table for testing",
                     "table_miss_flow": {
                         "priority": 0,
@@ -53,6 +57,7 @@ class TestMain():
 
     def test_list_pipelines(self):
         """Test list pipelines"""
+        self.napp.pipeline_controller.get_pipelines.return_value = {}
         api = get_test_client(self.napp.controller, self.napp)
         url = f"{self.API_URL}/v1/pipeline"
         response = api.get(url)
@@ -60,6 +65,9 @@ class TestMain():
 
     def test_get_pipeline(self):
         """Test get a pipeline"""
+        self.napp.pipeline_controller.get_pipeline.return_value = {
+            "test": "pipeline"
+        }
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
         url = f"{self.API_URL}/v1/pipeline/{pipeline_id}"
@@ -68,6 +76,7 @@ class TestMain():
 
     def test_delete_pipeline(self):
         """Test delete a pipeline"""
+        self.napp.pipeline_controller.delete_pipeline.return_value = 1
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
         url = f"{self.API_URL}/v1/pipeline/{pipeline_id}"
