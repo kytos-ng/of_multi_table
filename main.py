@@ -8,9 +8,10 @@ import pathlib
 from flask import jsonify, request
 from pydantic import ValidationError
 from werkzeug.exceptions import BadRequest, NotFound
-
+from .settings import SUBSCRIBED_NAPPS
 from kytos.core import KytosNApp, log, rest
-from kytos.core.helpers import load_spec, validate_openapi
+from kytos.core.events import KytosEvent
+from kytos.core.helpers import listen_to, load_spec, validate_openapi
 
 from .controllers import PipelineController
 
@@ -24,17 +25,62 @@ class Main(KytosNApp):
     spec = load_spec(pathlib.Path(__file__).parent / "openapi.yml")
 
     def setup(self):
-        """Replace the '__init__' method for the KytosNApp subclass.
-
-        The setup method is automatically called by the controller when your
+        """
+        The setup method is automatically called by the controller when the
         application is loaded.
-
-        So, if you have any setup routine, insert it here.
         """
         self.pipeline_controller = self.get_pipeline_controller()
+        self.required_napps = set()
+        self.current_enabled_table = dict()
+        self.load_enable_table(self.get_enabled_table())
 
     def execute(self):
         """Execute once when the napp is running."""
+
+    def get_enabled_table(self):
+        """Get the only enabled table, if exists"""
+        return self.pipeline_controller.get_pipelines("enabled")
+
+    def load_enable_table(self, pipeline):
+        """Seach for a table that is enabled in the database
+        If there is initiate enable_table process"""
+        if not pipeline:
+            # There is not pipeline with {"status": "enabled"}
+            return
+
+        found_napps = set()
+        enable_napps = self.get_enabled_napps()
+        # There is always maximum 1 pipeline enabled
+        for table in pipeline["pipelines"][0]["multi_table"]:
+            for napp in table["napps_table_groups"]:
+                if napp in enable_napps:
+                    found_napps.add(napp)
+        self.required_napps = found_napps
+        self.current_enabled_table = pipeline["pipelines"][0]
+        self.start_enabling_pipeline()
+
+    def get_enabled_napps(self):
+        """Get the NApps that are enabled and subscribed"""
+        enable_napps = set()
+        for key in self.controller.napps:
+            # Keys look like this: ('kytos', 'of_lldp')
+            if key[1] in SUBSCRIBED_NAPPS:
+                enable_napps.add(key[1])
+        return enable_napps
+
+    def start_enabling_pipeline(self):
+        """Method to start the process to enable table
+        First, build content to be sent through an event
+        """
+        content = {}
+        for table in self.current_enabled_table["multi_table"]:
+            table_id = table["table_id"]
+            for napp in table["napps_table_groups"]:
+                content[napp] = {}
+                for flow_type in table["napps_table_groups"][napp]:
+                    content[napp][flow_type] = table_id
+        name = "enable_table"
+        self.emit_event(name, content)
 
     @staticmethod
     def get_pipeline_controller():
@@ -94,7 +140,8 @@ class Main(KytosNApp):
         """Enable pipeline"""
         log.debug(f"enable_pipeline /v1/pipeline/{pipeline_id}/enable")
         try:
-            self.pipeline_controller.update_status(pipeline_id, "enabled")
+            pipeline = self.pipeline_controller.update_status(pipeline_id,
+                                                              "enabled")
         except NotFound as err:
             msg = f"Pipeline {pipeline_id} not found"
             log.debug(f"enable_pipeline result {msg} 404")
@@ -102,6 +149,28 @@ class Main(KytosNApp):
         msg = f"Pipeline {pipeline_id} enabled"
         log.debug(f"enable_pipeline result {msg} 201")
         return jsonify(msg), 200
+
+    def emit_event(self, name, content=None):
+        """Send event"""
+        context="kytos/of_multi_table"
+        event_name = f"{context}.{name}"
+        event = KytosEvent(name=event_name, content=content)
+        self.controller.buffers.app.put(event)
+
+    @listen_to("kytos/(mef_eline|coloring|of_lldp).enable_table")
+    def on_enable_table(self, event):
+        """Listen for NApps responses"""
+        self.handle_enable_table(event)
+        
+    def handle_enable_table(self, event):
+        """Handle NApps responses from enable_table"""
+        self.event = event
+        napp = event.name.split('/')[1].split('.')[0]
+        self.required_napps.remove(napp)
+        if self.required_napps:
+            # There are more required napps, 'waiting' responses
+            return
+        self.get_flows_to_be_installed()
 
     @rest("/v1/pipeline/<pipeline_id>/disable", methods=["POST"])
     def disable_pipeline(self, pipeline_id):
@@ -116,6 +185,40 @@ class Main(KytosNApp):
         msg = f"Pipeline {pipeline_id} disabled"
         log.debug(f"disable_pipeline result {msg} 201")
         return jsonify(msg), 200
+
+    def get_flows_to_be_installed(self):
+        """Get flows from flow manager so this NApp can modify them"""
+        # ---------------------\
+        # \|/ To be continued | >
+        # ---------------------/
+        pass
+
+    @listen_to("kytos/flow_manager.flow.added")
+    def on_flow_mod_added(self, event):
+        """Looking for recently added flows"""
+        self.handle_flow_mod_added(event)
+
+    def handle_flow_mod_added(self, event):
+        """Handle recently added flows"""
+        pass
+    
+    @listen_to("kytos/of_core.handshake.completed")
+    def on_handshake_completed(self, event):
+        """Listen to new switches added"""
+        self.handle_handshake_completed(event)
+    
+    def handle_handshake_completed(self, event):
+        """Handle new added switches"""
+        pass
+    
+    @listen_to("kytos/flow_manager.flow.error")
+    def on_flow_mod_error(self, event):
+        """Handle flow mod errors"""
+        self.handle_flow_mod_error(event)
+
+    def handle_flow_mod_error(self, event):
+        """Handle flow mod errors"""
+        pass
 
     @staticmethod
     def error_msg(error_list: list) -> str:

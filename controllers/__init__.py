@@ -74,8 +74,10 @@ class PipelineController:
         """Delete a pipeline"""
         return self.db.pipelines.delete_one({"id": id}).deleted_count
     
-    def update_status(self, id: str, status: str) -> Dict:
-        """Update the status of a pipeline"""
+    def update_status(self, id: str, status: str) -> dict:
+        """Update the status of a pipeline
+        There should not be more than 1 pipeline enable
+        """
         utc_now = datetime.utcnow()
         pipeline = self.db.pipelines.find_one_and_update(
             {"id": id},
@@ -85,7 +87,9 @@ class PipelineController:
         if not pipeline:
             msg = f"Pipeline {id} not found."
             raise NotFound(msg)
+        
         if status == "enabled":
+            # Disable all the other pipelines
             self.db.pipelines.find_one_and_update(
                 {"status": "enabled", "id": {"$ne": id}},
                 {"$set": {"status": "disabled", "updated_at": utc_now}}
