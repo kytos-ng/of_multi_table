@@ -39,8 +39,8 @@ paths:
             schema:
               $ref: '#/components/schemas/NewPipeline'
       responses:
-        '200':
-          description: OK
+        '201':
+          description: OK. Returns the ID for the created pipeline
         '400':
           description: Request do not have a valid JSON.
         '415':
@@ -79,6 +79,8 @@ paths:
       responses:
         '200':
           description: OK
+        '404':
+          description: The pipeline in the url was not found
 
   /v1/pipeline/{pipeline_id}/enable:
     post:
@@ -94,6 +96,8 @@ paths:
       responses:
         '201':
           description: OK
+        '404':
+          description: The pipeline in the url was not found
 
   /v1/pipeline/{pipeline_id}/disable:
     post:
@@ -109,6 +113,8 @@ paths:
       responses:
         '201':
           description: OK
+        '404':
+          description: The pipeline in the url was not found
 
 
 components:

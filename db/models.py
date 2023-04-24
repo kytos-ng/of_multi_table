@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, conint
 
 
 class DocumentBaseModel(BaseModel):
@@ -86,7 +86,7 @@ class TableMissDoc(BaseModel):
 
 class MultitableDoc(BaseModel):
     """Base model for Multitable"""
-    table_id: int
+    table_id: conint(ge=0, le=254)
     table_miss_flow: Optional[TableMissDoc]
     description: Optional[str]
     napps_table_groups: Optional[dict[str, List[str]]]

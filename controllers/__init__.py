@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from uuid import uuid4
-
+from typing import Optional, Dict
 from pydantic import ValidationError
 from pymongo.collection import ReturnDocument
 from pymongo.errors import AutoReconnect
@@ -36,7 +36,7 @@ class PipelineController:
         self.db_client = self.mongo.client
         self.db = self.db_client[self.mongo.db_name]
 
-    def insert_pipeline(self, pipeline: dict) -> InsertOneResult:
+    def insert_pipeline(self, pipeline: Dict) -> InsertOneResult:
         """Insert a pipeline"""
         utc_now = datetime.utcnow()
         _id = str(uuid4().hex)
@@ -51,7 +51,7 @@ class PipelineController:
             raise err
         return _id
     
-    def get_pipelines(self, status: str = None) -> dict:
+    def get_pipelines(self, status: str = None) -> Dict:
         """Get a list of pipelines"""
         match_filters = {"$match": {}}
         if status:
@@ -63,18 +63,18 @@ class PipelineController:
         ])
         return {"pipelines": [pipeline for pipeline in result]}
     
-    def get_pipeline(self, id: str) -> dict:
+    def get_pipeline(self, id: str) -> Optional[Dict]:
         """Get a single pipeline"""
         return self.db.pipelines.find_one(
             {"_id": id},
             PipelineBaseDoc.projection()
         )
     
-    def delete_pipeline(self, id: str) -> dict:
+    def delete_pipeline(self, id: str) -> int:
         """Delete a pipeline"""
         return self.db.pipelines.delete_one({"id": id}).deleted_count
     
-    def update_status(self, id: str, status: str) -> dict:
+    def update_status(self, id: str, status: str) -> Dict:
         """Update the status of a pipeline"""
         utc_now = datetime.utcnow()
         pipeline = self.db.pipelines.find_one_and_update(
