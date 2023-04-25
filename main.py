@@ -101,7 +101,7 @@ class Main(KytosNApp):
             raise err
         msg = f"Pipeline {pipeline_id} enabled"
         log.debug(f"enable_pipeline result {msg} 201")
-        return jsonify(msg), 201
+        return jsonify(msg), 200
 
     @rest("/v1/pipeline/<pipeline_id>/disable", methods=["POST"])
     def disable_pipeline(self, pipeline_id):
@@ -115,7 +115,7 @@ class Main(KytosNApp):
             raise err
         msg = f"Pipeline {pipeline_id} disabled"
         log.debug(f"disable_pipeline result {msg} 201")
-        return jsonify(msg), 201
+        return jsonify(msg), 200
 
     @staticmethod
     def error_msg(error_list: list) -> str:

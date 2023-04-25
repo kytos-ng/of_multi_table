@@ -116,7 +116,7 @@ class TestMain():
         pipeline_id = "test_id"
         url = f"{self.API_URL}/v1/pipeline/{pipeline_id}/enable"
         response = api.post(url)
-        assert response.status_code == 201
+        assert response.status_code == 200
 
     def test_enable_pipeline(self):
         """Test enable a pipeline with NotFound error"""
@@ -133,7 +133,7 @@ class TestMain():
         pipeline_id = "test_id"
         url = f"{self.API_URL}/v1/pipeline/{pipeline_id}/disable"
         response = api.post(url)
-        assert response.status_code == 201
+        assert response.status_code == 200
 
     def test_disable_pipeline(self):
         """Test disable a pipeline with NotFound error"""
