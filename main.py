@@ -2,18 +2,21 @@
 
 This NApp implements Oplenflow multi tables
 """
-# pylint: disable=unused-argument
+# pylint: disable=unused-argument, too-many-arguments, too-many-public-methods
+# pylint: disable=attribute-defined-outside-init
 import pathlib
+from threading import Lock
 
 from flask import jsonify, request
 from pydantic import ValidationError
 from werkzeug.exceptions import BadRequest, NotFound
-from .settings import SUBSCRIBED_NAPPS
+
 from kytos.core import KytosNApp, log, rest
 from kytos.core.events import KytosEvent
 from kytos.core.helpers import listen_to, load_spec, validate_openapi
 
 from .controllers import PipelineController
+from .settings import SUBSCRIBED_NAPPS
 
 
 class Main(KytosNApp):
@@ -29,9 +32,10 @@ class Main(KytosNApp):
         The setup method is automatically called by the controller when the
         application is loaded.
         """
+        self.subscribed_napps = SUBSCRIBED_NAPPS
         self.pipeline_controller = self.get_pipeline_controller()
+        self._pipeline_lock = Lock()
         self.required_napps = set()
-        self.current_enabled_table = dict()
         self.load_enable_table(self.get_enabled_table())
 
     def execute(self):
@@ -39,46 +43,50 @@ class Main(KytosNApp):
 
     def get_enabled_table(self):
         """Get the only enabled table, if exists"""
-        return self.pipeline_controller.get_pipelines("enabled")
+        pipelines = self.pipeline_controller.get_pipelines("enabled")
+        try:
+            return pipelines["pipelines"][0]
+        except IndexError:
+            return None
 
-    def load_enable_table(self, pipeline):
-        """Seach for a table that is enabled in the database
-        If there is initiate enable_table process"""
+    def load_enable_table(self, pipeline: dict):
+        """If a pipeline was received, set 'self' variables"""
         if not pipeline:
             # There is not pipeline with {"status": "enabled"}
             return
 
         found_napps = set()
         enable_napps = self.get_enabled_napps()
-        # There is always maximum 1 pipeline enabled
-        for table in pipeline["pipelines"][0]["multi_table"]:
+        # Find NApps in the pipeline to notify them
+        for table in pipeline["multi_table"]:
             for napp in table["napps_table_groups"]:
                 if napp in enable_napps:
                     found_napps.add(napp)
         self.required_napps = found_napps
-        self.current_enabled_table = pipeline["pipelines"][0]
-        self.start_enabling_pipeline()
+        self.start_enabling_pipeline(pipeline)
 
     def get_enabled_napps(self):
         """Get the NApps that are enabled and subscribed"""
         enable_napps = set()
         for key in self.controller.napps:
             # Keys look like this: ('kytos', 'of_lldp')
-            if key[1] in SUBSCRIBED_NAPPS:
+            if key[1] in self.subscribed_napps:
                 enable_napps.add(key[1])
         return enable_napps
 
-    def start_enabling_pipeline(self):
+    def start_enabling_pipeline(self, pipeline: dict):
         """Method to start the process to enable table
         First, build content to be sent through an event
+        notifying NApps about their new table set up.
         """
         content = {}
-        for table in self.current_enabled_table["multi_table"]:
-            table_id = table["table_id"]
-            for napp in table["napps_table_groups"]:
-                content[napp] = {}
-                for flow_type in table["napps_table_groups"][napp]:
-                    content[napp][flow_type] = table_id
+        with self._pipeline_lock:
+            for table in pipeline["multi_table"]:
+                table_id = table["table_id"]
+                for napp in table["napps_table_groups"]:
+                    content[napp] = {}
+                    for flow_type in table["napps_table_groups"][napp]:
+                        content[napp][flow_type] = table_id
         name = "enable_table"
         self.emit_event(name, content)
 
@@ -146,13 +154,14 @@ class Main(KytosNApp):
             msg = f"Pipeline {pipeline_id} not found"
             log.debug(f"enable_pipeline result {msg} 404")
             raise err
+        self.load_enable_table(pipeline)
         msg = f"Pipeline {pipeline_id} enabled"
         log.debug(f"enable_pipeline result {msg} 201")
         return jsonify(msg), 200
 
     def emit_event(self, name, content=None):
         """Send event"""
-        context="kytos/of_multi_table"
+        context = "kytos/of_multi_table"
         event_name = f"{context}.{name}"
         event = KytosEvent(name=event_name, content=content)
         self.controller.buffers.app.put(event)
@@ -161,11 +170,11 @@ class Main(KytosNApp):
     def on_enable_table(self, event):
         """Listen for NApps responses"""
         self.handle_enable_table(event)
-        
+
     def handle_enable_table(self, event):
         """Handle NApps responses from enable_table"""
-        self.event = event
         napp = event.name.split('/')[1].split('.')[0]
+        # Check against the last current table
         self.required_napps.remove(napp)
         if self.required_napps:
             # There are more required napps, 'waiting' responses
@@ -191,7 +200,6 @@ class Main(KytosNApp):
         # ---------------------\
         # \|/ To be continued | >
         # ---------------------/
-        pass
 
     @listen_to("kytos/flow_manager.flow.added")
     def on_flow_mod_added(self, event):
@@ -200,17 +208,15 @@ class Main(KytosNApp):
 
     def handle_flow_mod_added(self, event):
         """Handle recently added flows"""
-        pass
-    
+
     @listen_to("kytos/of_core.handshake.completed")
     def on_handshake_completed(self, event):
         """Listen to new switches added"""
         self.handle_handshake_completed(event)
-    
+
     def handle_handshake_completed(self, event):
         """Handle new added switches"""
-        pass
-    
+
     @listen_to("kytos/flow_manager.flow.error")
     def on_flow_mod_error(self, event):
         """Handle flow mod errors"""
@@ -218,7 +224,6 @@ class Main(KytosNApp):
 
     def handle_flow_mod_error(self, event):
         """Handle flow mod errors"""
-        pass
 
     @staticmethod
     def error_msg(error_list: list) -> str:
