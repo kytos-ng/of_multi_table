@@ -7,7 +7,6 @@ from pymongo.collection import ReturnDocument
 from pymongo.errors import AutoReconnect
 from pymongo.results import InsertOneResult
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_random
-from werkzeug.exceptions import NotFound
 
 from kytos.core.db import Mongo
 from kytos.core.retry import before_sleep, for_all_methods, retries
@@ -74,7 +73,7 @@ class PipelineController:
         """Delete a pipeline"""
         return self.db.pipelines.delete_one({"id": id}).deleted_count
     
-    def update_status(self, id: str, status: str) -> Dict:
+    def update_status(self, id: str, status: str) -> Optional[Dict]:
         """Update the status of a pipeline"""
         utc_now = datetime.utcnow()
         pipeline = self.db.pipelines.find_one_and_update(
@@ -83,8 +82,7 @@ class PipelineController:
             return_document=ReturnDocument.AFTER
         )
         if not pipeline:
-            msg = f"Pipeline {id} not found."
-            raise NotFound(msg)
+            return pipeline
         if status == "enabled":
             self.db.pipelines.find_one_and_update(
                 {"status": "enabled", "id": {"$ne": id}},

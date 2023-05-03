@@ -80,7 +80,6 @@ class TestController():
         assert args[1]["$set"]["status"] == "disabled"
 
     def test_update_status_error(self):
-        """Test update_status with NotFound error"""
+        """Test update_status not found"""
         self.controller.db.pipelines.find_one_and_update.return_value = None
-        with pytest.raises(NotFound):
-            self.controller.update_status("pipeline_id", "disabled")
+        assert not self.controller.update_status("pipeline_id", "disabled")

@@ -277,15 +277,6 @@ setup(
     license="MIT",
     install_requires=read_requirements() + ["setuptools >= 59.6.0"],
     packages=[],
-    extras_require={
-        "dev": [
-            "pytest==7.0.0",
-            "pytest-cov==3.0.0",
-            "pip-tools==6.6.0",
-            "yala",
-            "tox==3.24.5",
-        ],
-    },
     cmdclass={
         "clean": Cleaner,
         "coverage": TestCoverage,
