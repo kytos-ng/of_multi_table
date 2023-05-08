@@ -74,10 +74,10 @@ class TestController():
         assert args[1]["$set"]["status"] == "disabled"
 
         self.controller.update_status("pipeline_id", "enabled")
-        assert self.controller.db.pipelines.find_one_and_update.call_count == 3
+        assert self.controller.db.pipelines.find_one_and_update.call_count == 2
         args = self.controller.db.pipelines.find_one_and_update.call_args[0]
-        assert args[0] == {'status': 'enabled', 'id': {'$ne': 'pipeline_id'}}
-        assert args[1]["$set"]["status"] == "disabled"
+        assert args[0] == {"id": "pipeline_id"}
+        assert args[1]["$set"]["status"] == "enabled"
 
     def test_update_status_error(self):
         """Test update_status not found"""

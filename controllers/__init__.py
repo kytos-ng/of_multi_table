@@ -75,6 +75,10 @@ class PipelineController:
     
     def update_status(self, id: str, status: str) -> Optional[Dict]:
         """Update the status of a pipeline"""
+        if status == "enabling":
+            pipeline = self.db.pipelines.find_one({"status":"enabling"})
+            if pipeline:
+                return {"error": "Conflict"}
         utc_now = datetime.utcnow()
         pipeline = self.db.pipelines.find_one_and_update(
             {"id": id},
@@ -83,7 +87,7 @@ class PipelineController:
         )
         if not pipeline:
             return pipeline
-        if status == "enabled":
+        if status == "enabling":
             self.db.pipelines.find_one_and_update(
                 {"status": "enabled", "id": {"$ne": id}},
                 {"$set": {"status": "disabled", "updated_at": utc_now}}

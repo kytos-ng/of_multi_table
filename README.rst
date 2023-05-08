@@ -14,6 +14,10 @@ Overview
 
 This NApp implements Oplenflow multi tables
 
+:warning: Uninstallation :warning:
+
+If you are going to uninstall this NApp be sure to disable the current pipeline from database.
+
 Requirements
 ============
 
