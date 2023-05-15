@@ -72,24 +72,47 @@ class PipelineController:
     def delete_pipeline(self, id: str) -> int:
         """Delete a pipeline"""
         return self.db.pipelines.delete_one({"id": id}).deleted_count
-    
-    def update_status(self, id: str, status: str) -> Optional[Dict]:
-        """Update the status of a pipeline"""
-        if status == "enabling":
-            pipeline = self.db.pipelines.find_one({"status":"enabling"})
-            if pipeline:
-                return {"error": "Conflict"}
+
+    def enabling_pipeline(self, id: str) -> Optional[Dict]:
+        """Change pipeline status to enabling"""
         utc_now = datetime.utcnow()
         pipeline = self.db.pipelines.find_one_and_update(
             {"id": id},
-            {"$set": {"status": status, "updated_at": utc_now}},
+            {"$set": {"status": "enabling", "updated_at": utc_now}},
             return_document=ReturnDocument.AFTER
         )
         if not pipeline:
             return pipeline
-        if status == "enabling":
-            self.db.pipelines.find_one_and_update(
+        self.db.pipelines.find_one_and_update(
                 {"status": "enabled", "id": {"$ne": id}},
                 {"$set": {"status": "disabled", "updated_at": utc_now}}
-            )
+        )
         return pipeline
+
+    def enabled_pipeline(self, id: str) -> Optional[Dict]:
+        """Change pipeline status to enabled"""
+        utc_now = datetime.utcnow()
+        pipeline = self.db.pipelines.find_one_and_update(
+            {"id": id},
+            {"$set": {"status": "enabled", "updated_at": utc_now}},
+            return_document=ReturnDocument.AFTER
+        )
+        return pipeline
+
+    def disabled_pipeline(self, id: str) -> Optional[Dict]:
+        """Change pipeline status to disabled
+        ReturnDocument set to before to check if actions are needed
+        if it was disabled, no need to analyze flows"""
+        utc_now = datetime.utcnow()
+        pipeline = self.db.pipelines.find_one_and_update(
+            {"id": id},
+            {"$set": {"status": "disabled", "updated_at": utc_now}},
+            return_document=ReturnDocument.BEFORE
+        )
+        return pipeline
+    
+    def get_last_updated(self) -> Dict:
+        """Get last updated pipeline
+        Only used to return to previous enabled pipeline"""
+        pipelines = self.db.pipelines.find().sort("updated_at", -1)
+        return pipelines.next()

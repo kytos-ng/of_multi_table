@@ -21,6 +21,9 @@ If you are going to uninstall this NApp be sure to disable the current pipeline 
 Requirements
 ============
 
+This NApp needs consistency check to ensure miss flow entries installation. Ensure that ``ENABLE_CONSISTENCY_CHECK`` is `True` in the settings file from ``flow_manager``
+The following NApps are also required:
+
 - `kytos-ng/flow_manager <https://github.com/kytos-ng/flow_manager.git>`_
 - `kytos-ng/of_core <https://github.com/kytos-ng/of_core>`_
 - `MongoDB <https://github.com/kytos-ng/kytos#how-to-use-with-mongodb>`_
@@ -32,7 +35,6 @@ Subscribed
 ----------
 
 - ``kytos/flow_manager.flow.added``
-- ``kytos/of_core.handshake.completed``
 - ``kytos/flow_manager.flow.error``
 - ``kytos/[mef_eline|telemetry_int|coloring|of_lldp].enable_table``
 
