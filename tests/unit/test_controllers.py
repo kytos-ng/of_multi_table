@@ -42,6 +42,17 @@ class TestController():
         with pytest.raises(ValidationError):
             self.controller.insert_pipeline({})
 
+    def test_get_active_pipeline(self):
+        """Test get_active_pipeline"""
+        self.controller.get_active_pipeline()
+        expected_arg = [
+            {"status": 'enabling'},
+            {"status": 'enabled'},
+            {"status": 'disabling'}
+        ]
+        args = self.controller.db.pipelines.find_one.call_args[0]
+        assert args[0]['$or'] == expected_arg
+
     def test_get_pipelines(self):
         """Test get pipelines"""
         self.controller.get_pipelines()
@@ -81,6 +92,14 @@ class TestController():
         args = self.controller.db.pipelines.find_one_and_update.call_args[0]
         assert args[0] == {"id": "pipeline_id"}
         assert args[1]["$set"]["status"] == "enabled"
+
+    def test_disabling_pipeline(self):
+        """Test disabling_pipeline"""
+        self.controller.disabling_pipeline("pipeline_id")
+        assert self.controller.db.pipelines.find_one_and_update.call_count == 1
+        args = self.controller.db.pipelines.find_one_and_update.call_args[0]
+        assert args[0] == {"id": "pipeline_id"}
+        assert args[1]["$set"]["status"] == "disabling"
 
     def test_disabled_pipeline(self):
         """Test disabled_pipeline"""

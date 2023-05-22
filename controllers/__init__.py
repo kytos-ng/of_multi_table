@@ -49,7 +49,16 @@ class PipelineController:
         except ValidationError as err:
             raise err
         return _id
-    
+
+    def get_active_pipeline(self) -> Dict:
+        """Get a pipeline that is enabling, disabling or enabled.
+        There can only be only be one of them at a time"""
+        return self.db.pipelines.find_one({"$or":[
+            {"status": 'enabling'},
+            {"status": 'enabled'},
+            {"status": 'disabling'}
+        ]}) or {}
+
     def get_pipelines(self, status: str = None) -> Dict:
         """Get a list of pipelines"""
         match_filters = {"$match": {}}
@@ -96,6 +105,16 @@ class PipelineController:
             {"id": id},
             {"$set": {"status": "enabled", "updated_at": utc_now}},
             return_document=ReturnDocument.AFTER
+        )
+        return pipeline
+
+    def disabling_pipeline(self, id: str) -> Optional[Dict]:
+        """Change pipeline status to disabling"""
+        utc_now = datetime.utcnow()
+        pipeline = self.db.pipelines.find_one_and_update(
+            {"id": id},
+            {"$set": {"status": "disabling", "updated_at": utc_now}},
+            return_document=ReturnDocument.BEFORE
         )
         return pipeline
 

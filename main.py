@@ -8,14 +8,19 @@ import pathlib
 import time
 from typing import Dict, Optional
 
-import requests
+import httpx
+import tenacity
+from httpx._exceptions import RequestError
 from pydantic import ValidationError
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_fixed)
 
 from kytos.core import KytosNApp, log, rest
 from kytos.core.events import KytosEvent
 from kytos.core.helpers import listen_to, load_spec, validate_openapi
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
                                  get_json_or_400)
+from kytos.core.retry import before_sleep
 
 from .controllers import PipelineController
 from .settings import (BATCH_INTERVAL, BATCH_SIZE, COOKIE_PREFIX,
@@ -42,26 +47,20 @@ class Main(KytosNApp):
         self.subscribed_napps = SUBSCRIBED_NAPPS
         self.pipeline_controller = self.get_pipeline_controller()
         self.required_napps = set()
-        self.load_enable_table(self.get_enabled_table())
+        self.load_pipeline(self.get_enabled_table())
 
     def execute(self):
         """Execute once when the napp is running."""
 
     def get_enabled_table(self) -> dict:
         """Get the only enabled table, if exists"""
-        pipelines = self.pipeline_controller.get_pipelines("enabling")
-        if pipelines["pipelines"]:
-            return pipelines["pipelines"][0]
-        pipelines = self.pipeline_controller.get_pipelines("enabled")
-        if pipelines["pipelines"]:
-            return pipelines["pipelines"][0]
+        pipeline = self.pipeline_controller.get_active_pipeline()
+        if pipeline.get("status") in {"enabling", "enabled"}:
+            return pipeline
         return self.default_pipeline
 
-    def load_enable_table(self, pipeline: dict):
+    def load_pipeline(self, pipeline: dict):
         """If a pipeline was received, set 'self' variables"""
-        if not (pipeline.get('status') in {'enabled', 'enabling'}):
-            return
-
         found_napps = set()
         content = self.build_content(pipeline)
         enable_napps = self.get_enabled_napps()
@@ -124,53 +123,42 @@ class Main(KytosNApp):
             return
         self.get_flows_to_be_installed()
 
-    def get_installed_flows(self, pipeline: Dict) -> Optional[Dict]:
+    @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_fixed(20),
+            before_sleep=before_sleep,
+            retry=retry_if_exception_type(RequestError))
+    def get_installed_flows(self) -> Optional[Dict]:
         """Get flows from flow_manager"""
         command = "v2/stored_flows?state=installed"
-        response = requests.get(f"{FLOW_MANAGER_URL}/{command}")
+        response = httpx.get(f"{FLOW_MANAGER_URL}/{command}")
 
         if response.status_code // 100 != 2:
-            # Error when enabling pipeline
-            # Return to default pipeline
-            if pipeline.get("status") == "enabling":
-                content = self.build_content(self.default_pipeline)
-                enabled_napps = self.get_enabled_napps()
-                self.required_napps = enabled_napps & (self.subscribed_napps)
-                # Added 'error' so flows are not requested again
-                self.required_napps.add('error')
-                self.emit_event('enable_table', content=content)
-                self.pipeline_controller.disabled_pipeline(pipeline['id'])
-                action = "Return to default pipeline."
-
-            # Error when disabling pipeline
-            # Return to previous enabled pipeline
-            else:
-                pipeline = self.pipeline_controller.get_last_updated()
-                content = self.build_content(pipeline)
-                enabled_napps = self.get_enabled_napps()
-                self.required_napps = enabled_napps & (self.subscribed_napps)
-                # Added 'error' so flows are not requested again
-                self.required_napps.add('error')
-                self.emit_event('enable_table', content=content)
-                self.pipeline_controller.enabled_pipeline(pipeline['id'])
-                action = f"Return to pipeline {pipeline['id']}"
-
             log.error(f"Could not get the flows from flow_mager. Status "
-                      f"code {response.status_code}. {action}")
+                      f"code {response.status_code}")
             return None
         return response.json()
 
     def get_flows_to_be_installed(self):
         """Get flows from flow manager so this NApp can modify them
         Third, install the flows with different table_id"""
-        pipeline = self.get_enabled_table()
-        if pipeline.get("status") == "enabled":
-            # Pipeline enabling has finnished already
+        pipeline = self.pipeline_controller.get_active_pipeline()
+        if not pipeline or pipeline.get("status") == "enabled":
+            # Default or enabled pipeline, not need to get flows
             return
 
-        flows_by_swich = self.get_installed_flows(pipeline)
+        pipeline_id = pipeline['id']
+        if pipeline.get("status") == "disabling":
+            pipeline = self.default_pipeline
+
+        try:
+            flows_by_swich = self.get_installed_flows()
+        except tenacity.RetryError as err:
+            raise HTTPException(424, "It couldn't get stored_flows") from err
+
         if flows_by_swich is None:
             return
+
         set_up = self.build_content(pipeline)
         delete_flows = {}
         install_flows = {}
@@ -195,15 +183,16 @@ class Main(KytosNApp):
                     # Change table_id before being added
                     flow["flow"].update({"table_id": expected_table_id})
                     install_flows[switch].append(flow["flow"].copy())
+        self.send_flows(delete_flows, 'delete')
+        self.send_flows(install_flows, 'install')
+
         if pipeline.get("status") is None:
             # Changing to default pipeline. Miss flow entries are not needed
             self.delete_miss_flows()
+            self.pipeline_controller.disabled_pipeline(pipeline_id)
         else:
             self.install_miss_flows(pipeline)
-        self.send_flows(delete_flows, 'delete', True)
-        self.send_flows(install_flows, 'install', True)
-        if pipeline.get("status"):
-            self.pipeline_controller.enabled_pipeline(pipeline["id"])
+            self.pipeline_controller.enabled_pipeline(pipeline_id)
 
     def install_miss_flows(self, pipeline: dict):
         """Install miss flow entry to a switch"""
@@ -227,7 +216,7 @@ class Main(KytosNApp):
                     if instruction and instruction[0]:
                         flow['instructions'] = miss_flow.get('instructions')
                     install_flows[switch].append(flow)
-        self.send_flows(install_flows, 'install', True)
+        self.send_flows(install_flows, 'install')
 
     def delete_miss_flows(self):
         """Delete miss flows, aka. of_multi_table flows.
@@ -239,11 +228,11 @@ class Main(KytosNApp):
         delete_flows = {}
         for switch in self.controller.switches:
             delete_flows[switch] = [flow]
-        self.send_flows(delete_flows, 'delete', True)
+        self.send_flows(delete_flows, 'delete')
 
-    def send_flows(self, flows: Dict, action: str, force: bool):
+    def send_flows(self, flows: Dict, action: str, force: bool = True):
         """Send flows to flow_manager through event"""
-        print("BATCH -> ", BATCH_SIZE)
+        offset = BATCH_SIZE or None
         while flows:
             switch = list(flows.keys())
             for dpid in switch:
@@ -253,15 +242,15 @@ class Main(KytosNApp):
                 name = f"kytos.flow_manager.flows.{action}"
                 content = {
                     'dpid': dpid,
-                    'flow_dict': {"flows": flows[dpid][:BATCH_SIZE]},
+                    'flow_dict': {"flows": flows[dpid][:offset]},
                     'force': force
                 }
                 event = KytosEvent(name=name, content=content)
                 self.controller.buffers.app.put(event)
-                if BATCH_SIZE is None or BATCH_SIZE >= len(flows[dpid]):
+                if offset is None or offset >= len(flows[dpid]):
                     del flows[dpid]
                     continue
-                flows[dpid] = flows[dpid][BATCH_SIZE:]
+                flows[dpid] = flows[dpid][offset:]
             time.sleep(BATCH_INTERVAL)
 
     @staticmethod
@@ -310,11 +299,16 @@ class Main(KytosNApp):
         """Delete pipeline by pipeline_id"""
         pipeline_id = request.path_params["pipeline_id"]
         log.debug(f"delete_pipeline /v1/pipeline/{pipeline_id}")
-        result = self.pipeline_controller.delete_pipeline(pipeline_id)
-        if result == 0:
+        pipeline = self.pipeline_controller.get_pipeline(pipeline_id)
+        if pipeline is None:
             msg = f"pipeline_id {pipeline_id} not found"
             log.debug(f"delete_pipeline result {msg} 404")
             raise HTTPException(404, detail=msg)
+        if pipeline["status"] in {"enabled", "enabling", "disabling"}:
+            msg = "Only disabled pipelines are allowed to be delete"
+            log.debug(f"delete_pipeline result {msg} 409")
+            raise HTTPException(409, detail=msg)
+        self.pipeline_controller.delete_pipeline(pipeline_id)
         msg = f"Pipeline {pipeline_id} deleted successfully"
         log.debug(f"delete_pipeline result {msg} 200")
         return JSONResponse(msg)
@@ -324,18 +318,21 @@ class Main(KytosNApp):
         """Enable pipeline"""
         pipeline_id = request.path_params["pipeline_id"]
         log.debug(f"enable_pipeline /v1/pipeline/{pipeline_id}/enable")
-        pipeline = self.pipeline_controller.get_pipelines("enabling")
-        if pipeline["pipelines"]:
-            msg = "There is another pipeline enabling already"
+        pipeline = self.pipeline_controller.get_active_pipeline()
+        status = pipeline.get("status")
+        id_ = pipeline.get("id")
+        if pipeline and (id_ != pipeline_id or status == "disabling"):
+            msg = f"Other pipeline {id_} is {status}"
             log.debug(f"enable_pipeline result {msg} 409")
             raise HTTPException(409, detail=msg)
-        pipeline = self.pipeline_controller.enabling_pipeline(pipeline_id)
-        if not pipeline:
-            msg = f"Pipeline {pipeline_id} not found"
-            log.debug(f"enable_pipeline result {msg} 404")
-            raise HTTPException(404, detail=msg)
 
-        self.load_enable_table(pipeline)
+        if status != "enabled":
+            pipeline = self.pipeline_controller.enabling_pipeline(pipeline_id)
+            if not pipeline:
+                msg = f"Pipeline {pipeline_id} not found"
+                log.debug(f"enable_pipeline result {msg} 404")
+                raise HTTPException(404, detail=msg)
+            self.load_pipeline(pipeline)
         msg = f"Pipeline {pipeline_id} enabling"
         log.debug(f"enable_pipeline result {msg} 200")
         return JSONResponse(msg)
@@ -345,33 +342,24 @@ class Main(KytosNApp):
         """Disable pipeline"""
         pipeline_id = request.path_params["pipeline_id"]
         log.debug(f"disable_pipeline /v1/pipeline/{pipeline_id}/disable")
-        pipeline = self.pipeline_controller.get_pipelines("enabling")
-        if pipeline["pipelines"] and \
-           pipeline_id != pipeline["pipelines"][0]["id"]:
-            msg = "There is another pipeline being enable, " + \
-                  "please wait for it to finish or disable it."
-            log.debug(f"enable_pipeline result {msg} 409")
+        pipeline = self.pipeline_controller.get_active_pipeline()
+        status = pipeline.get("status")
+        id_ = pipeline.get("id")
+        if pipeline and (id_ != pipeline_id or status == "enabling"):
+            msg = f"Other pipeline {id_} is {status}"
+            log.debug(f"disable_pipeline result {msg} 409")
             raise HTTPException(409, detail=msg)
-        pipeline = self.pipeline_controller.disabled_pipeline(pipeline_id)
-        if not pipeline:
-            msg = f"Pipeline {pipeline_id} not found"
-            log.debug(f"disable_pipeline result {msg} 404")
-            raise HTTPException(404, detail=msg)
-        if pipeline["status"] != "disabled":
-            # If the recently disabled pipeline was not disabled,
-            # return to default
-            self.enable_default_pipeline()
+
+        if status != "disabled":
+            pipeline = self.pipeline_controller.disabling_pipeline(pipeline_id)
+            if not pipeline:
+                msg = f"Pipeline {pipeline_id} not found"
+                log.debug(f"disable_pipeline result {msg} 404")
+                raise HTTPException(404, detail=msg)
+            self.load_pipeline(self.default_pipeline)
         msg = f"Pipeline {pipeline_id} disabled"
         log.debug(f"disable_pipeline result {msg} 200")
         return JSONResponse(msg)
-
-    def enable_default_pipeline(self):
-        """Return to default pipeline
-        After disabling a pipeline"""
-        content = self.build_content(self.default_pipeline)
-        enabled_napps = self.get_enabled_napps()
-        self.required_napps = enabled_napps.intersection(self.subscribed_napps)
-        self.emit_event('enable_table', content=content)
 
     @listen_to("kytos/flow_manager.flow.added")
     def on_flow_mod_added(self, event):

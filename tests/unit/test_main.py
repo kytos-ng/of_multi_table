@@ -1,8 +1,7 @@
 """Test the Main class"""
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel, ValidationError
-from kytos.core.events import KytosEvent
 from kytos.lib.helpers import get_controller_mock, get_test_client
 from napps.kytos.of_multi_table.main import Main
 
@@ -21,31 +20,30 @@ class TestMain:
     async def test_get_enabled_table(self):
         """Test get the enabled table"""
         controller = self.napp.pipeline_controller
-        controller.get_pipelines.return_value = {"pipelines": ["test"]}
-        assert self.napp.get_enabled_table() == "test"
-        controller.get_pipelines.return_value = {"pipelines": []}
+        controller.get_active_pipeline.return_value = {"status": "enabling"}
+        assert self.napp.get_enabled_table() == {"status": "enabling"}
+        controller.get_active_pipeline.return_value = {"status": "disabling"}
+        assert self.napp.get_enabled_table() == self.napp.default_pipeline
+        controller.get_active_pipeline.return_value = {}
         assert self.napp.get_enabled_table() == self.napp.default_pipeline
 
     @patch("napps.kytos.of_multi_table.main.Main.start_enabling_pipeline")
     @patch("napps.kytos.of_multi_table.main.Main.get_enabled_napps")
     @patch("napps.kytos.of_multi_table.main.Main.build_content")
-    async def test_load_enable_table(self, *args):
+    async def test_load_pipeline(self, *args):
         """Test load an enabled table"""
         (mock_content, mock_napps, mock_enabling) = args
-        # Default pipeline activation is not from here
-        self.napp.load_enable_table({'id': 'mocked_defaul_pipeline'})
-        assert mock_enabling.call_count == 0
-
         content = {
             'of_lldp': {'base': 0},
             'coloring': {'base': 0},
+            'mef_eline': {'epl': 0, 'evpl': 0}
         }
         mock_content.return_value = content
         mock_napps.return_value = {'of_lldp'}
-        self.napp.load_enable_table({
-            'id': 'mocked_pipeline',
-            'status': 'enabling'
-        })
+        self.napp.load_pipeline(self.napp.default_pipeline)
+
+        assert mock_content.call_count == 1
+        assert mock_napps.call_count == 1
         assert self.napp.required_napps == {'of_lldp'}
         assert mock_enabling.call_count == 1
         assert mock_enabling.call_args[0][0] == content
@@ -94,6 +92,7 @@ class TestMain:
 
     async def test_emit_event(self):
         """Test emit event"""
+        self.napp.controller = MagicMock()
         controller = self.napp.controller
         name = "enable_table"
         self.napp.emit_event(name)
@@ -115,13 +114,16 @@ class TestMain:
     @patch("napps.kytos.of_multi_table.main.Main.install_miss_flows")
     @patch("napps.kytos.of_multi_table.main.Main.delete_miss_flows")
     @patch("napps.kytos.of_multi_table.main.Main.get_installed_flows")
-    @patch("napps.kytos.of_multi_table.main.Main.get_enabled_table")
     async def test_get_flows_to_be_installed(self, *args):
         """Test get flows from flow manager to be installed"""
-        (mock_table, mock_flows, mock_delete, mock_install, mock_send) = args
+        (mock_flows, mock_delete, mock_install, mock_send) = args
+        controller = self.napp.pipeline_controller
 
-        # Default pipeline
-        mock_table.return_value = self.napp.default_pipeline
+        # Disabling pipeline
+        controller.get_active_pipeline.return_value = {
+            "id": "mock_pipeline",
+            "status": "disabling"
+        }
         flow_of_lldp = {
             'flow': {
                 'owner': 'of_lldp',
@@ -139,17 +141,17 @@ class TestMain:
         self.napp.get_flows_to_be_installed()
         assert mock_delete.call_count == 1
         assert mock_install.call_count == 0
-        assert self.napp.pipeline_controller.enabled_pipeline.call_count == 0
+        assert controller.enabled_pipeline.call_count == 0
 
         args = mock_send.call_args[0]
         flow_of_lldp["flow"]["table_id"] = 0
         assert mock_send.call_count == 2
         assert args[0]['00:00:00:00:00:00:00:01'][0] == flow_of_lldp['flow']
         assert args[1] == 'install'
-        assert args[2] is True
+        assert controller.disabled_pipeline.call_args[0][0] == "mock_pipeline"
 
         # Enabling pipeline
-        mock_table.return_value = {
+        controller.get_active_pipeline.return_value = {
             'multi_table': [{
                     'table_id': 2,
                     'napps_table_groups': {'of_lldp': ['base']}
@@ -162,21 +164,20 @@ class TestMain:
         self.napp.get_flows_to_be_installed()
         assert mock_delete.call_count == 1
         assert mock_install.call_count == 1
-        assert self.napp.pipeline_controller.enabled_pipeline.call_count == 1
+        assert controller.enabled_pipeline.call_count == 1
 
         args = mock_send.call_args[0]
         flow_of_lldp["flow"]["table_id"] = 2
         assert mock_send.call_count == 4
         assert args[0]['00:00:00:00:00:00:00:01'][0] == flow_of_lldp['flow']
         assert args[1] == 'install'
-        assert args[2] is True
 
         # Enabled pipeline
-        mock_table.return_value = {'status': 'enabled'}
+        controller.get_active_pipeline.return_value = {'status': 'enabled'}
         self.napp.get_flows_to_be_installed()
         assert mock_delete.call_count == 1
         assert mock_install.call_count == 1
-        assert self.napp.pipeline_controller.enabled_pipeline.call_count == 1
+        assert controller.enabled_pipeline.call_count == 1
         assert mock_send.call_count == 4
 
     @patch("napps.kytos.of_multi_table.main.Main.get_cookie")
@@ -219,7 +220,6 @@ class TestMain:
         }
         assert args[0] == expected_arg
         assert args[1] == 'install'
-        assert args[2] is True
 
     @patch("napps.kytos.of_multi_table.main.Main.send_flows")
     async def test_delete_miss_flows(self, mock_send):
@@ -326,40 +326,65 @@ class TestMain:
 
     async def test_delete_pipeline(self):
         """Test delete a pipeline"""
-        self.napp.pipeline_controller.delete_pipeline.return_value = 1
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
         url = f"{self.base_endpoint}/pipeline/{pipeline_id}"
         response = await api.delete(url)
         assert response.status_code == 200
 
+    async def test_delete_pipeline_conflict(self):
+        """Test delete a pipeline Conflict"""
+        self.napp.pipeline_controller.get_pipeline.return_value = {
+            "status": "enabling"
+        }
+        api = get_test_client(self.napp.controller, self.napp)
+        pipeline_id = "test_id"
+        url = f"{self.base_endpoint}/pipeline/{pipeline_id}"
+        response = await api.delete(url)
+        assert response.status_code == 409
+
     async def test_delete_pipeline_not_found(self):
         """Test delete a pipeline with NotFound error"""
-        self.napp.pipeline_controller.delete_pipeline.return_value = 0
+        self.napp.pipeline_controller.get_pipeline.return_value = None
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
         url = f"{self.base_endpoint}/pipeline/{pipeline_id}"
         response = await api.delete(url)
         assert response.status_code == 404
 
-    @patch("napps.kytos.of_multi_table.main.Main.load_enable_table")
+    @patch("napps.kytos.of_multi_table.main.Main.load_pipeline")
     async def test_enable_pipeline(self, mock_load):
         """Test enable a pipeline"""
         controller = self.napp.pipeline_controller
-        controller.get_pipelines.return_value = {"pipelines": []}
+        # All pipelines are disabled
+        controller.get_active_pipeline.return_value = {}
         controller.enabling_pipeline.return_value = {"id": "pipeline_id"}
         api = get_test_client(self.napp.controller, self.napp)
-        pipeline_id = "test_id"
+        pipeline_id = "pipeline_id"
         url = f"{self.base_endpoint}/pipeline/{pipeline_id}/enable"
         response = await api.post(url)
         assert response.status_code == 200
         assert mock_load.call_count == 1
         assert mock_load.call_args[0][0] == {"id": "pipeline_id"}
 
+        # Retry enabling pipeline, "id"s must be the same
+        controller.get_active_pipeline.return_value = {
+            "id": "mocked_id",
+            "status": "enabling"
+        }
+        controller.enabling_pipeline.return_value = {"id": "mocked_id"}
+        api = get_test_client(self.napp.controller, self.napp)
+        pipeline_id = "mocked_id"
+        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/enable"
+        response = await api.post(url)
+        assert response.status_code == 200
+        assert mock_load.call_count == 2
+        assert mock_load.call_args[0][0] == {"id": "mocked_id"}
+
     async def test_enable_pipeline_not_found(self):
         """Test enable a pipeline not found"""
         controller = self.napp.pipeline_controller
-        controller.get_pipelines.return_value = {"pipelines": []}
+        controller.get_active_pipeline.return_value = {}
         controller.enabling_pipeline.return_value = {}
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
@@ -370,43 +395,63 @@ class TestMain:
     async def test_enable_pipeline_conflict(self):
         """Test enable a pipeline conflict"""
         controller = self.napp.pipeline_controller
-        controller.get_pipelines.return_value = {"pipelines": [{
-            "id": "pipeline_enabling"
-        }]}
+
+        # Other pipeline is enabling
+        controller.get_active_pipeline.return_value = {
+            "id": "pipeline_enabling",
+            "status": "enabling"
+        }
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
         url = f"{self.base_endpoint}/pipeline/{pipeline_id}/enable"
         response = await api.post(url)
         assert response.status_code == 409
 
-    @patch("napps.kytos.of_multi_table.main.Main.enable_default_pipeline")
-    async def test_disable_pipeline(self, mock_enable_default):
+        # Other pipeline is disabling
+        controller.get_active_pipeline.return_value = {
+            "id": "pipeline_enabling",
+            "status": "disabling"
+        }
+        api = get_test_client(self.napp.controller, self.napp)
+        pipeline_id = "test_id"
+        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/enable"
+        response = await api.post(url)
+        assert response.status_code == 409
+
+    @patch("napps.kytos.of_multi_table.main.Main.load_pipeline")
+    async def test_disable_pipeline(self, mock_load):
         """Test disable a pipeline"""
         controller = self.napp.pipeline_controller
-        controller.get_pipelines.return_value = {"pipelines": []}
-        controller.disabled_pipeline.return_value = {"status": "enabled"}
-        pipeline_id = "test_id"
-        api = get_test_client(self.napp.controller, self.napp)
-        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/disable"
-        response = await api.post(url)
-        assert response.status_code == 200
-        assert mock_enable_default.call_count == 1
 
-        # Disable the enabling pipeline
-        controller.get_pipelines.return_value = {"pipelines": [{
-            "id": "test_id"
-        }]}
+        # Disable an enabled pipeline
+        controller.get_active_pipeline.return_value = {
+            "id": "mocked_id",
+            "status": "enabled"
+        }
+        controller.disabling_pipeline.return_value = {"status": "enabled"}
+        pipeline_id = "mocked_id"
         api = get_test_client(self.napp.controller, self.napp)
         url = f"{self.base_endpoint}/pipeline/{pipeline_id}/disable"
         response = await api.post(url)
         assert response.status_code == 200
-        assert mock_enable_default.call_count == 2
+        assert mock_load.call_count == 1
+
+        # Retry a disabling pipeline
+        controller.get_active_pipeline.return_value = {
+            "id": "mocked_id",
+            "status": "disabling"
+        }
+        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/disable"
+        response = await api.post(url)
+        assert response.status_code == 200
+        assert mock_load.call_count == 2
 
     async def test_disable_pipeline_not_found(self):
         """Test disable a pipeline not found"""
         controller = self.napp.pipeline_controller
-        controller.get_pipelines.return_value = {"pipelines": []}
-        controller.disabled_pipeline.return_value = {}
+        controller.get_active_pipeline.return_value = {}
+        controller.disabling_pipeline.return_value = {}
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
         url = f"{self.base_endpoint}/pipeline/{pipeline_id}/disable"
@@ -416,8 +461,11 @@ class TestMain:
     async def test_disable_pipeline_conflict(self):
         """Test disable a pipeline conflict"""
         controller = self.napp.pipeline_controller
-        controller.get_pipelines.return_value = {"pipelines": [{
-            "id": "enabling"
+
+        # Conflict, another pipeline is disabling
+        controller.get_active_pipeline.return_value = {"pipelines": [{
+            "id": "mocked_id",
+            "status": "disabling"
         }]}
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
@@ -425,22 +473,15 @@ class TestMain:
         response = await api.post(url)
         assert response.status_code == 409
 
-    @patch("napps.kytos.of_multi_table.main.Main.get_enabled_napps")
-    @patch("napps.kytos.of_multi_table.main.Main.build_content")
-    async def test_enable_default_pipeline(self, mock_content, mock_napps):
-        """Test test enable default pipeline"""
-        content = {
-            "mef_eline": {"epl": 0, "evpl": 0},
-            "of_lldp": {"base": 0},
-            "coloring": {"base": 0}
-        }
-        mock_content.return_value = content
-        mock_napps.return_value = {"mef_eline", "of_lldp", "of_core"}
-        self.napp.emit_event = MagicMock()
-        self.napp.enable_default_pipeline()
-        assert self.napp.required_napps == {"mef_eline", "of_lldp"}
-        assert self.napp.emit_event.call_count == 1
-        assert self.napp.emit_event.call_args[1] == {"content": content}
+        # Conflict, a pipeline is enabling
+        controller.get_active_pipeline.return_value = {"pipelines": [{
+            "status": "disabling"
+        }]}
+        api = get_test_client(self.napp.controller, self.napp)
+        pipeline_id = "test_id"
+        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/disable"
+        response = await api.post(url)
+        assert response.status_code == 409
 
     async def test_get_cookie(self):
         """Test get cookie"""
