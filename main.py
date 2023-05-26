@@ -362,13 +362,22 @@ class Main(KytosNApp):
 
     def handle_flow_mod_error(self, event):
         """Handle flow mod errors"""
+        if event.content.get("error_exception"):
+            return
         flow = event.content["flow"]
-        if flow["owner"] == "of_multi_table":
+        if self.check_ownership(flow.cookie):
             # A miss flow only is installed when enabling
             pipeline = self.pipeline_controller.get_active_pipeline()
             status = "enabling_error"
             self.pipeline_controller.error_pipeline(pipeline["id"], status)
-            log.error(f"Miss flow cannot be installed. Flow: {flow}")
+            log.error(f"Miss flow cannot be installed. Flow: {flow.as_dict()}")
+
+    @staticmethod
+    def check_ownership(cookie):
+        """Check if a cookie is from this NApp"""
+        napp_cookie = COOKIE_PREFIX << 56
+        mask = 0xFF00000000000000
+        return (napp_cookie & mask) == (cookie & mask)
 
     @staticmethod
     def get_cookie(switch_dpid) -> int:

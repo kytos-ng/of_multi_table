@@ -45,13 +45,8 @@ class TestController():
     def test_get_active_pipeline(self):
         """Test get_active_pipeline"""
         self.controller.get_active_pipeline()
-        expected_arg = [
-            {"status": 'enabling'},
-            {"status": 'enabled'},
-            {"status": 'disabling'}
-        ]
         args = self.controller.db.pipelines.find_one.call_args[0]
-        assert args[0]['$or'] == expected_arg
+        assert args[0]['status']['$ne'] == "disabled"
 
     def test_get_pipelines(self):
         """Test get pipelines"""

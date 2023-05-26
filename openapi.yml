@@ -209,3 +209,5 @@ components:
             - enabled
             - enabling
             - disabling
+            - enabling_error
+            - disabling_error

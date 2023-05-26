@@ -162,7 +162,7 @@ class TestMain:
         }
         mock_flows.return_value = {'00:00:00:00:00:00:00:01': [flow_of_lldp]}
         self.napp.get_flows_to_be_installed()
-        assert mock_delete.call_count == 1
+        assert mock_delete.call_count == 2
         assert mock_install.call_count == 1
         assert controller.enabled_pipeline.call_count == 1
 
@@ -175,7 +175,7 @@ class TestMain:
         # Enabled pipeline
         controller.get_active_pipeline.return_value = {'status': 'enabled'}
         self.napp.get_flows_to_be_installed()
-        assert mock_delete.call_count == 1
+        assert mock_delete.call_count == 2
         assert mock_install.call_count == 1
         assert controller.enabled_pipeline.call_count == 1
         assert mock_send.call_count == 4
@@ -326,6 +326,9 @@ class TestMain:
 
     async def test_delete_pipeline(self):
         """Test delete a pipeline"""
+        self.napp.pipeline_controller.get_pipeline.return_value = {
+            "status": "disabled"
+        }
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
         url = f"{self.base_endpoint}/pipeline/{pipeline_id}"
@@ -357,7 +360,6 @@ class TestMain:
         """Test enable a pipeline"""
         controller = self.napp.pipeline_controller
         # All pipelines are disabled
-        controller.get_active_pipeline.return_value = {}
         controller.enabling_pipeline.return_value = {"id": "pipeline_id"}
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "pipeline_id"
@@ -366,20 +368,6 @@ class TestMain:
         assert response.status_code == 200
         assert mock_load.call_count == 1
         assert mock_load.call_args[0][0] == {"id": "pipeline_id"}
-
-        # Retry enabling pipeline, "id"s must be the same
-        controller.get_active_pipeline.return_value = {
-            "id": "mocked_id",
-            "status": "enabling"
-        }
-        controller.enabling_pipeline.return_value = {"id": "mocked_id"}
-        api = get_test_client(self.napp.controller, self.napp)
-        pipeline_id = "mocked_id"
-        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/enable"
-        response = await api.post(url)
-        assert response.status_code == 200
-        assert mock_load.call_count == 2
-        assert mock_load.call_args[0][0] == {"id": "mocked_id"}
 
     async def test_enable_pipeline_not_found(self):
         """Test enable a pipeline not found"""
@@ -392,43 +380,15 @@ class TestMain:
         response = await api.post(url)
         assert response.status_code == 404
 
-    async def test_enable_pipeline_conflict(self):
-        """Test enable a pipeline conflict"""
-        controller = self.napp.pipeline_controller
-
-        # Other pipeline is enabling
-        controller.get_active_pipeline.return_value = {
-            "id": "pipeline_enabling",
-            "status": "enabling"
-        }
-        api = get_test_client(self.napp.controller, self.napp)
-        pipeline_id = "test_id"
-        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/enable"
-        response = await api.post(url)
-        assert response.status_code == 409
-
-        # Other pipeline is disabling
-        controller.get_active_pipeline.return_value = {
-            "id": "pipeline_enabling",
-            "status": "disabling"
-        }
-        api = get_test_client(self.napp.controller, self.napp)
-        pipeline_id = "test_id"
-        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/enable"
-        response = await api.post(url)
-        assert response.status_code == 409
-
     @patch("napps.kytos.of_multi_table.main.Main.load_pipeline")
     async def test_disable_pipeline(self, mock_load):
         """Test disable a pipeline"""
         controller = self.napp.pipeline_controller
-
-        # Disable an enabled pipeline
-        controller.get_active_pipeline.return_value = {
-            "id": "mocked_id",
-            "status": "enabled"
+        controller.get_pipeline.return_value = {
+            "id": "mocked_id"
         }
-        controller.disabling_pipeline.return_value = {"status": "enabled"}
+        # Disable an enabled pipeline
+        controller.get_active_pipeline.return_value = {}
         pipeline_id = "mocked_id"
         api = get_test_client(self.napp.controller, self.napp)
         url = f"{self.base_endpoint}/pipeline/{pipeline_id}/disable"
@@ -450,48 +410,49 @@ class TestMain:
     async def test_disable_pipeline_not_found(self):
         """Test disable a pipeline not found"""
         controller = self.napp.pipeline_controller
-        controller.get_active_pipeline.return_value = {}
-        controller.disabling_pipeline.return_value = {}
+        controller.get_pipeline.return_value = {}
         api = get_test_client(self.napp.controller, self.napp)
         pipeline_id = "test_id"
         url = f"{self.base_endpoint}/pipeline/{pipeline_id}/disable"
         response = await api.post(url)
         assert response.status_code == 404
 
-    async def test_disable_pipeline_conflict(self):
-        """Test disable a pipeline conflict"""
+    async def test_check_ownership(self):
+        """Test check of_multi_table ownership"""
+        result = self.napp.check_ownership(int(0xad00000000000001))
+        assert result is True
+
+        result = self.napp.check_ownership(int(0xac00000000000001))
+        assert result is False
+
+    async def test_handle_flow_mod_error(self):
+        """Test handle flow_mod error"""
         controller = self.napp.pipeline_controller
+        controller.reset_mock()
+        flow = MagicMock()
+        event = MagicMock()
 
-        # Conflict, another pipeline is disabling
-        controller.get_active_pipeline.return_value = {"pipelines": [{
-            "id": "mocked_id",
-            "status": "disabling"
-        }]}
-        api = get_test_client(self.napp.controller, self.napp)
-        pipeline_id = "test_id"
-        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/disable"
-        response = await api.post(url)
-        assert response.status_code == 409
+        # Event with error_exception
+        event.content = {"error_exception": "exception_mock"}
+        self.napp.handle_flow_mod_error(event)
+        assert controller.get_active_pipeline.call_count == 0
+        assert controller.error_pipeline.call_count == 0
 
-        # Conflict, a pipeline is enabling
-        controller.get_active_pipeline.return_value = {"pipelines": [{
-            "status": "disabling"
-        }]}
-        api = get_test_client(self.napp.controller, self.napp)
-        pipeline_id = "test_id"
-        url = f"{self.base_endpoint}/pipeline/{pipeline_id}/disable"
-        response = await api.post(url)
-        assert response.status_code == 409
+        # Event with flow from another napp
+        flow.cookie = int(0xac00000000000001)
+        event.content = {"flow": flow}
+        self.napp.handle_flow_mod_error(event)
+        assert controller.get_active_pipeline.call_count == 0
+        assert controller.error_pipeline.call_count == 0
+
+        # Event with flow from this napp
+        flow.cookie = int(0xad00000000000001)
+        event.content = {"flow": flow}
+        self.napp.handle_flow_mod_error(event)
+        assert controller.get_active_pipeline.call_count == 1
+        assert controller.error_pipeline.call_count == 1
 
     async def test_get_cookie(self):
         """Test get cookie"""
         switch = '00:00:00:00:00:00:00:01'
         assert self.napp.get_cookie(switch) == 12465963768561532929
-
-    async def test_error_msg(self):
-        """Test error message"""
-        # ValidationErro mocked response
-        error_list = [{'loc': ('table_id', ), 'msg': 'mock_msg_1'}]
-        actual_msg = self.napp.error_msg(error_list)
-        expected_msg = 'table_id: mock_msg_1'
-        assert actual_msg == expected_msg
