@@ -12,6 +12,7 @@ from kytos.core.db import Mongo
 from kytos.core.retry import before_sleep, for_all_methods, retries
 
 from napps.kytos.of_multi_table.db.models import PipelineBaseDoc
+from napps.kytos.of_multi_table.status import PipelineStatus
 
 
 @for_all_methods(
@@ -51,13 +52,10 @@ class PipelineController:
         return _id
 
     def get_active_pipeline(self) -> Dict:
-        """Get a pipeline that is enabling, disabling or enabled.
-        There can only be only be one of them at a time"""
-        return self.db.pipelines.find_one({"$or":[
-            {"status": 'enabling'},
-            {"status": 'enabled'},
-            {"status": 'disabling'}
-        ]}) or {}
+        """Get a pipeline that is not disabled."""
+        return self.db.pipelines.find_one({"status": {
+            "$ne": PipelineStatus.DISABLED.value
+        }}) or {}
 
     def get_pipelines(self, status: str = None) -> Dict:
         """Get a list of pipelines"""
@@ -87,13 +85,16 @@ class PipelineController:
         utc_now = datetime.utcnow()
         pipeline = self.db.pipelines.find_one_and_update(
             {"id": id},
-            {"$set": {"status": "enabling", "updated_at": utc_now}},
+            {"$set": {
+                "status": PipelineStatus.ENABLING.value,
+                "updated_at": utc_now
+            }},
             return_document=ReturnDocument.AFTER
         )
         if not pipeline:
             return pipeline
         self.db.pipelines.find_one_and_update(
-                {"status": "enabled", "id": {"$ne": id}},
+                {"status": {"$ne": "disabled"}, "id": {"$ne": id}},
                 {"$set": {"status": "disabled", "updated_at": utc_now}}
         )
         return pipeline
@@ -103,7 +104,10 @@ class PipelineController:
         utc_now = datetime.utcnow()
         pipeline = self.db.pipelines.find_one_and_update(
             {"id": id},
-            {"$set": {"status": "enabled", "updated_at": utc_now}},
+            {"$set": {
+                "status": PipelineStatus.ENABLED.value,
+                "updated_at": utc_now
+            }},
             return_document=ReturnDocument.AFTER
         )
         return pipeline
@@ -113,7 +117,10 @@ class PipelineController:
         utc_now = datetime.utcnow()
         pipeline = self.db.pipelines.find_one_and_update(
             {"id": id},
-            {"$set": {"status": "disabling", "updated_at": utc_now}},
+            {"$set": {
+                "status": PipelineStatus.DISABLING.value,
+                "updated_at": utc_now
+            }},
             return_document=ReturnDocument.BEFORE
         )
         return pipeline
@@ -125,13 +132,23 @@ class PipelineController:
         utc_now = datetime.utcnow()
         pipeline = self.db.pipelines.find_one_and_update(
             {"id": id},
-            {"$set": {"status": "disabled", "updated_at": utc_now}},
+            {"$set": {
+                "status": PipelineStatus.DISABLED.value,
+                "updated_at": utc_now
+            }},
             return_document=ReturnDocument.BEFORE
         )
         return pipeline
-    
-    def get_last_updated(self) -> Dict:
-        """Get last updated pipeline
-        Only used to return to previous enabled pipeline"""
-        pipelines = self.db.pipelines.find().sort("updated_at", -1)
-        return pipelines.next()
+
+    def error_pipeline(self, id: str, status: str) -> Dict:
+        """Add '-error' to the current status"""
+        utc_now = datetime.utcnow()
+        pipeline = self.db.pipelines.find_one_and_update(
+            {"id": id},
+            {"$set": {
+                "status": status,
+                "updated_at": utc_now
+            }},
+            return_document=ReturnDocument.BEFORE
+        )
+        return pipeline

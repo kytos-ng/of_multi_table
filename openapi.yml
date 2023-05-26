@@ -130,8 +130,6 @@ components:
         multi_table: {
           "$ref": "#/components/schemas/Pipeline"
         }
-        status:
-          type: string
     
     Pipeline: # Can be referenced via '#/components/schemas/Pipeline'
       type: array
@@ -209,3 +207,5 @@ components:
           enum:
             - disabled
             - enabled
+            - enabling
+            - disabling

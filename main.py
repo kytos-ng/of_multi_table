@@ -10,7 +10,7 @@ from typing import Dict, Optional
 
 import httpx
 import tenacity
-from httpx._exceptions import RequestError
+from httpx import RequestError
 from pydantic import ValidationError
 from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_fixed)
@@ -19,7 +19,7 @@ from kytos.core import KytosNApp, log, rest
 from kytos.core.events import KytosEvent
 from kytos.core.helpers import listen_to, load_spec, validate_openapi
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
-                                 get_json_or_400)
+                                 error_msg, get_json_or_400)
 from kytos.core.retry import before_sleep
 
 from .controllers import PipelineController
@@ -55,7 +55,7 @@ class Main(KytosNApp):
     def get_enabled_table(self) -> dict:
         """Get the only enabled table, if exists"""
         pipeline = self.pipeline_controller.get_active_pipeline()
-        if pipeline.get("status") in {"enabling", "enabled"}:
+        if "enabl" in pipeline.get("status", ""):
             return pipeline
         return self.default_pipeline
 
@@ -93,7 +93,7 @@ class Main(KytosNApp):
         content = {}
         for table in pipeline["multi_table"]:
             table_id = table["table_id"]
-            for napp in table["napps_table_groups"]:
+            for napp in table.get("napps_table_groups", {}):
                 if napp not in content:
                     content[napp] = {}
                 for flow_type in table["napps_table_groups"][napp]:
@@ -131,12 +131,11 @@ class Main(KytosNApp):
     def get_installed_flows(self) -> Optional[Dict]:
         """Get flows from flow_manager"""
         command = "v2/stored_flows?state=installed"
-        response = httpx.get(f"{FLOW_MANAGER_URL}/{command}")
+        response = httpx.get(f"{FLOW_MANAGER_URL}/{command}", timeout=20)
 
-        if response.status_code // 100 != 2:
-            log.error(f"Could not get the flows from flow_mager. Status "
-                      f"code {response.status_code}")
-            return None
+        if response.is_server_error:
+            raise RequestError(message=f"{response.text} on {command}")
+
         return response.json()
 
     def get_flows_to_be_installed(self):
@@ -148,13 +147,18 @@ class Main(KytosNApp):
             return
 
         pipeline_id = pipeline['id']
-        if pipeline.get("status") == "disabling":
+        if "disabl" in pipeline.get("status", ""):
             pipeline = self.default_pipeline
 
         try:
             flows_by_swich = self.get_installed_flows()
-        except tenacity.RetryError as err:
-            raise HTTPException(424, "It couldn't get stored_flows") from err
+        except tenacity.RetryError:
+            status = pipeline.get("status")
+            status = "enabling_error" if status else "disabling_error"
+            msg = f"Could not get flows. Pipeline {pipeline_id} {status}"
+            self.pipeline_controller.error_pipeline(pipeline_id, status)
+            log.error(msg)
+            return
 
         if flows_by_swich is None:
             return
@@ -179,20 +183,22 @@ class Main(KytosNApp):
                     }
                     if flow["flow"].get('match'):
                         delete['match'] = flow["flow"].get('match')
-                    delete_flows[switch].append(delete.copy())
+                    delete_flows[switch].append(delete)
                     # Change table_id before being added
                     flow["flow"].update({"table_id": expected_table_id})
-                    install_flows[switch].append(flow["flow"].copy())
+                    install_flows[switch].append(flow["flow"])
         self.send_flows(delete_flows, 'delete')
         self.send_flows(install_flows, 'install')
-
+        self.delete_miss_flows()
         if pipeline.get("status") is None:
-            # Changing to default pipeline. Miss flow entries are not needed
-            self.delete_miss_flows()
             self.pipeline_controller.disabled_pipeline(pipeline_id)
+            msg = f"Pipeline {pipeline_id} disabled"
+            log.debug(f"of_multi_table result {msg}")
         else:
             self.install_miss_flows(pipeline)
             self.pipeline_controller.enabled_pipeline(pipeline_id)
+            msg = f"Pipeline {pipeline_id} enabled"
+            log.debug(f"of_multi_table result {msg}")
 
     def install_miss_flows(self, pipeline: dict):
         """Install miss flow entry to a switch"""
@@ -219,8 +225,7 @@ class Main(KytosNApp):
         self.send_flows(install_flows, 'install')
 
     def delete_miss_flows(self):
-        """Delete miss flows, aka. of_multi_table flows.
-        This method is called when returning to default pipeline."""
+        """Delete miss flows, aka. of_multi_table flows"""
         flow = {
             "cookie": int(COOKIE_PREFIX << 56),
             "cookie_mask": int(0xFF00000000000000)
@@ -267,7 +272,7 @@ class Main(KytosNApp):
         try:
             _id = self.pipeline_controller.insert_pipeline(data)
         except ValidationError as err:
-            msg = self.error_msg(err.errors())
+            msg = error_msg(err.errors())
             log.debug(f"add_pipeline result {msg} 400")
             raise HTTPException(400, detail=msg) from err
         msg = {"id": _id}
@@ -304,7 +309,7 @@ class Main(KytosNApp):
             msg = f"pipeline_id {pipeline_id} not found"
             log.debug(f"delete_pipeline result {msg} 404")
             raise HTTPException(404, detail=msg)
-        if pipeline["status"] in {"enabled", "enabling", "disabling"}:
+        if pipeline["status"] != "disabled":
             msg = "Only disabled pipelines are allowed to be delete"
             log.debug(f"delete_pipeline result {msg} 409")
             raise HTTPException(409, detail=msg)
@@ -318,21 +323,12 @@ class Main(KytosNApp):
         """Enable pipeline"""
         pipeline_id = request.path_params["pipeline_id"]
         log.debug(f"enable_pipeline /v1/pipeline/{pipeline_id}/enable")
-        pipeline = self.pipeline_controller.get_active_pipeline()
-        status = pipeline.get("status")
-        id_ = pipeline.get("id")
-        if pipeline and (id_ != pipeline_id or status == "disabling"):
-            msg = f"Other pipeline {id_} is {status}"
-            log.debug(f"enable_pipeline result {msg} 409")
-            raise HTTPException(409, detail=msg)
-
-        if status != "enabled":
-            pipeline = self.pipeline_controller.enabling_pipeline(pipeline_id)
-            if not pipeline:
-                msg = f"Pipeline {pipeline_id} not found"
-                log.debug(f"enable_pipeline result {msg} 404")
-                raise HTTPException(404, detail=msg)
-            self.load_pipeline(pipeline)
+        pipeline = self.pipeline_controller.enabling_pipeline(pipeline_id)
+        if not pipeline:
+            msg = f"Pipeline {pipeline_id} not found"
+            log.debug(f"enable_pipeline result {msg} 404")
+            raise HTTPException(404, detail=msg)
+        self.load_pipeline(pipeline)
         msg = f"Pipeline {pipeline_id} enabling"
         log.debug(f"enable_pipeline result {msg} 200")
         return JSONResponse(msg)
@@ -342,32 +338,22 @@ class Main(KytosNApp):
         """Disable pipeline"""
         pipeline_id = request.path_params["pipeline_id"]
         log.debug(f"disable_pipeline /v1/pipeline/{pipeline_id}/disable")
+        pipeline = self.pipeline_controller.get_pipeline(pipeline_id)
+        if not pipeline:
+            msg = f"Pipeline {pipeline_id} not found"
+            log.debug(f"disable_pipeline result {msg} 404")
+            raise HTTPException(404, detail=msg)
         pipeline = self.pipeline_controller.get_active_pipeline()
-        status = pipeline.get("status")
-        id_ = pipeline.get("id")
-        if pipeline and (id_ != pipeline_id or status == "enabling"):
-            msg = f"Other pipeline {id_} is {status}"
-            log.debug(f"disable_pipeline result {msg} 409")
-            raise HTTPException(409, detail=msg)
-
-        if status != "disabled":
-            pipeline = self.pipeline_controller.disabling_pipeline(pipeline_id)
-            if not pipeline:
-                msg = f"Pipeline {pipeline_id} not found"
-                log.debug(f"disable_pipeline result {msg} 404")
-                raise HTTPException(404, detail=msg)
-            self.load_pipeline(self.default_pipeline)
-        msg = f"Pipeline {pipeline_id} disabled"
+        if pipeline and pipeline_id != pipeline["id"]:
+            # If there is another active pipeline, just assure disabled status
+            msg = f"Pipeline {pipeline_id} disabled"
+            log.debug(f"disable_pipeline result {msg}")
+            return JSONResponse(msg)
+        pipeline = self.pipeline_controller.disabling_pipeline(pipeline_id)
+        self.load_pipeline(self.default_pipeline)
+        msg = f"Pipeline {pipeline_id} disabling"
         log.debug(f"disable_pipeline result {msg} 200")
         return JSONResponse(msg)
-
-    @listen_to("kytos/flow_manager.flow.added")
-    def on_flow_mod_added(self, event):
-        """Looking for recently added flows"""
-        self.handle_flow_mod_added(event)
-
-    def handle_flow_mod_added(self, event):
-        """Handle recently added flows"""
 
     @listen_to("kytos/flow_manager.flow.error")
     def on_flow_mod_error(self, event):
@@ -376,23 +362,19 @@ class Main(KytosNApp):
 
     def handle_flow_mod_error(self, event):
         """Handle flow mod errors"""
+        flow = event.content["flow"]
+        if flow["owner"] == "of_multi_table":
+            # A miss flow only is installed when enabling
+            pipeline = self.pipeline_controller.get_active_pipeline()
+            status = "enabling_error"
+            self.pipeline_controller.error_pipeline(pipeline["id"], status)
+            log.error(f"Miss flow cannot be installed. Flow: {flow}")
 
     @staticmethod
     def get_cookie(switch_dpid) -> int:
         """Return the cookie integer given a dpid."""
         dpid = int(switch_dpid.replace(":", ""), 16)
         return (0x00FFFFFFFFFFFFFF & dpid) | (COOKIE_PREFIX << 56)
-
-    @staticmethod
-    def error_msg(error_list: list) -> str:
-        """Return a more request friendly error message from ValidationError"""
-        msg = ""
-        for err in error_list:
-            for value in err['loc']:
-                msg += str(value) + ", "
-            msg = msg[:-2]
-            msg += ": " + err["msg"] + "; "
-        return msg[:-2]
 
     def shutdown(self):
         """Run when your NApp is unloaded.
