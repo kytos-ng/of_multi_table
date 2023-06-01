@@ -3,7 +3,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
-from werkzeug.exceptions import NotFound
 
 from controllers import PipelineController
 
@@ -43,6 +42,12 @@ class TestController():
         with pytest.raises(ValidationError):
             self.controller.insert_pipeline({})
 
+    def test_get_active_pipeline(self):
+        """Test get_active_pipeline"""
+        self.controller.get_active_pipeline()
+        args = self.controller.db.pipelines.find_one.call_args[0]
+        assert args[0]['status']['$ne'] == "disabled"
+
     def test_get_pipelines(self):
         """Test get pipelines"""
         self.controller.get_pipelines()
@@ -64,22 +69,37 @@ class TestController():
         """Test delete_pipeline"""
         self.controller.delete_pipeline("pipeline_id")
         assert self.controller.db.pipelines.delete_one.call_count == 1
+        args = self.controller.db.pipelines.delete_one.call_args[0]
+        assert args[0] == {"id": "pipeline_id"}
 
-    def test_update_status(self):
-        """Test update_status"""
-        self.controller.update_status("pipeline_id", "disabled")
+    def test_enabling_pipeline(self):
+        """Test enabling_pipeline"""
+        self.controller.enabling_pipeline("pipeline_id")
+        assert self.controller.db.pipelines.find_one_and_update.call_count == 2
+        args = self.controller.db.pipelines.find_one_and_update.call_args[0]
+        # Only registers second call which disables previous enabled pipeline
+        assert args[1]["$set"]["status"] == "disabled"
+
+    def test_enabled_pipeline(self):
+        """Test enabled_pipeline"""
+        self.controller.enabled_pipeline("pipeline_id")
+        assert self.controller.db.pipelines.find_one_and_update.call_count == 1
+        args = self.controller.db.pipelines.find_one_and_update.call_args[0]
+        assert args[0] == {"id": "pipeline_id"}
+        assert args[1]["$set"]["status"] == "enabled"
+
+    def test_disabling_pipeline(self):
+        """Test disabling_pipeline"""
+        self.controller.disabling_pipeline("pipeline_id")
+        assert self.controller.db.pipelines.find_one_and_update.call_count == 1
+        args = self.controller.db.pipelines.find_one_and_update.call_args[0]
+        assert args[0] == {"id": "pipeline_id"}
+        assert args[1]["$set"]["status"] == "disabling"
+
+    def test_disabled_pipeline(self):
+        """Test disabled_pipeline"""
+        self.controller.disabled_pipeline("pipeline_id")
         assert self.controller.db.pipelines.find_one_and_update.call_count == 1
         args = self.controller.db.pipelines.find_one_and_update.call_args[0]
         assert args[0] == {"id": "pipeline_id"}
         assert args[1]["$set"]["status"] == "disabled"
-
-        self.controller.update_status("pipeline_id", "enabled")
-        assert self.controller.db.pipelines.find_one_and_update.call_count == 3
-        args = self.controller.db.pipelines.find_one_and_update.call_args[0]
-        assert args[0] == {'status': 'enabled', 'id': {'$ne': 'pipeline_id'}}
-        assert args[1]["$set"]["status"] == "disabled"
-
-    def test_update_status_error(self):
-        """Test update_status not found"""
-        self.controller.db.pipelines.find_one_and_update.return_value = None
-        assert not self.controller.update_status("pipeline_id", "disabled")
