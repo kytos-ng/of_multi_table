@@ -85,3 +85,12 @@ class TestDBModels():
         ]}
         with pytest.raises(ValidationError):
             PipelineBaseDoc(**pipeline)
+
+    def test_validate_table_id(self):
+        """Test validate table id"""
+        pipeline = {"multi_table": [
+            {"table_id": 1},
+            {"table_id": 1}
+        ]}
+        with pytest.raises(ValidationError):
+            PipelineBaseDoc(**pipeline)

@@ -116,10 +116,16 @@ class PipelineBaseDoc(DocumentBaseModel):
     def validate_table_groups(cls, pipeline):
         """Validate table groups"""
         content = {}
+        id_set = set()
         for table in pipeline:
             table_dict = table.dict(exclude_none=True)
             table_groups = table_dict.get("napps_table_groups", {})
             table_id = table_dict["table_id"]
+            if table_id in id_set:
+                msg = f"Table id {table_id} repeated"
+                raise ValueError(msg)
+            else:
+                id_set.add(table_id)
             for napp in table_groups:
                 if napp not in content:
                     content[napp] = set(table_groups[napp])
