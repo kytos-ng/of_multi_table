@@ -171,6 +171,15 @@ class Main(KytosNApp):
             install_flows[switch] = []
             for flow in flows_by_swich[switch]:
                 owner = flow["flow"].get("owner")
+                if owner == "of_multi_table":
+                    # To allow dynamic enabling, delete all miss flows
+                    delete = {
+                        "cookie": int(COOKIE_PREFIX << 56),
+                        "cookie_mask": int(0xFF00000000000000),
+                        'table_id': flow["flow"]["table_id"]
+                    }
+                    delete_flows[switch].append(delete)
+                    continue
                 if owner not in set_up:
                     continue
                 expected_table_id = set_up[owner][flow["flow"]["table_group"]]
@@ -180,6 +189,7 @@ class Main(KytosNApp):
                     delete = {
                         'cookie': flow["flow"].get('cookie'),
                         'cookie_mask': int(0xFFFFFFFFFFFFFFFF),
+                        'table_id': flow["flow"]["table_id"]
                     }
                     if flow["flow"].get('match'):
                         delete['match'] = flow["flow"].get('match')
@@ -187,9 +197,9 @@ class Main(KytosNApp):
                     # Change table_id before being added
                     flow["flow"].update({"table_id": expected_table_id})
                     install_flows[switch].append(flow["flow"])
+        log.info(f"of_multi_table pushing flows, pipeline: {pipeline}")
         self.send_flows(delete_flows, 'delete')
         self.send_flows(install_flows, 'install')
-        self.delete_miss_flows()
         if pipeline.get("status") is None:
             self.pipeline_controller.disabled_pipeline(pipeline_id)
             msg = f"Pipeline {pipeline_id} disabled"
@@ -223,17 +233,6 @@ class Main(KytosNApp):
                         flow['instructions'] = miss_flow.get('instructions')
                     install_flows[switch].append(flow)
         self.send_flows(install_flows, 'install')
-
-    def delete_miss_flows(self):
-        """Delete miss flows, aka. of_multi_table flows"""
-        flow = {
-            "cookie": int(COOKIE_PREFIX << 56),
-            "cookie_mask": int(0xFF00000000000000)
-        }
-        delete_flows = {}
-        for switch in self.controller.switches:
-            delete_flows[switch] = [flow]
-        self.send_flows(delete_flows, 'delete')
 
     def send_flows(self, flows: Dict, action: str, force: bool = True):
         """Send flows to flow_manager through event"""
@@ -347,7 +346,7 @@ class Main(KytosNApp):
         if pipeline and pipeline_id != pipeline["id"]:
             # If there is another active pipeline, just assure disabled status
             msg = f"Pipeline {pipeline_id} disabled"
-            log.debug(f"disable_pipeline result {msg}")
+            log.debug(f"disable_pipeline result {msg} 200")
             return JSONResponse(msg)
         pipeline = self.pipeline_controller.disabling_pipeline(pipeline_id)
         self.load_pipeline(self.default_pipeline)

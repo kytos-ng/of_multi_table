@@ -112,11 +112,10 @@ class TestMain:
 
     @patch("napps.kytos.of_multi_table.main.Main.send_flows")
     @patch("napps.kytos.of_multi_table.main.Main.install_miss_flows")
-    @patch("napps.kytos.of_multi_table.main.Main.delete_miss_flows")
     @patch("napps.kytos.of_multi_table.main.Main.get_installed_flows")
     async def test_get_flows_to_be_installed(self, *args):
         """Test get flows from flow manager to be installed"""
-        (mock_flows, mock_delete, mock_install, mock_send) = args
+        (mock_flows, mock_install, mock_send) = args
         controller = self.napp.pipeline_controller
 
         # Disabling pipeline
@@ -134,12 +133,15 @@ class TestMain:
             }
         }
         flow_unknown = {'flow': {'owner': 'of_core'}}
+        flow_of_multi_table = {'flow': {
+            'owner': 'of_multi_table',
+            'table_id': 1,
+        }}
         mock_flows.return_value = {'00:00:00:00:00:00:00:01': [
-            flow_of_lldp, flow_unknown
+            flow_of_lldp, flow_unknown, flow_of_multi_table
         ]}
 
         self.napp.get_flows_to_be_installed()
-        assert mock_delete.call_count == 1
         assert mock_install.call_count == 0
         assert controller.enabled_pipeline.call_count == 0
 
@@ -162,7 +164,6 @@ class TestMain:
         }
         mock_flows.return_value = {'00:00:00:00:00:00:00:01': [flow_of_lldp]}
         self.napp.get_flows_to_be_installed()
-        assert mock_delete.call_count == 2
         assert mock_install.call_count == 1
         assert controller.enabled_pipeline.call_count == 1
 
@@ -175,7 +176,6 @@ class TestMain:
         # Enabled pipeline
         controller.get_active_pipeline.return_value = {'status': 'enabled'}
         self.napp.get_flows_to_be_installed()
-        assert mock_delete.call_count == 2
         assert mock_install.call_count == 1
         assert controller.enabled_pipeline.call_count == 1
         assert mock_send.call_count == 4
@@ -220,21 +220,6 @@ class TestMain:
         }
         assert args[0] == expected_arg
         assert args[1] == 'install'
-
-    @patch("napps.kytos.of_multi_table.main.Main.send_flows")
-    async def test_delete_miss_flows(self, mock_send):
-        """Test delete miss flows"""
-        self.napp.controller.switches = {'00:00:00:00:00:00:00:01'}
-        self.napp.delete_miss_flows()
-        expected_arg = {
-            '00:00:00:00:00:00:00:01': [{
-                "cookie": int(0xad << 56),
-                "cookie_mask": int(0xFF00000000000000)
-            }]
-        }
-        assert mock_send.call_count == 1
-        args = mock_send.call_args[0]
-        assert args[0] == expected_arg
 
     @patch("time.sleep", return_value=None)
     @patch("napps.kytos.of_multi_table.main.BATCH_SIZE", 2)
