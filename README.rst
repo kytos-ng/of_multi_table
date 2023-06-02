@@ -1,4 +1,4 @@
-|License|
+|Stable| |Tag| |License| |Build| |Coverage| |Quality|
 
 .. raw:: html
 
@@ -58,5 +58,18 @@ Content:
 
 .. TAGs
 
+.. |Stable| image:: https://img.shields.io/badge/stability-stable-green.svg
+   :target: https://github.com/kytos-ng/of_multi_table
 .. |License| image:: https://img.shields.io/github/license/kytos-ng/kytos.svg
     :target: https://github.com/kytos-ng/of_multi_table/blob/master/LICENSE
+.. |Build| image:: https://scrutinizer-ci.com/g/kytos-ng/of_multi_table/badges/build.png?b=master
+    :alt: Build status
+    :target: https://scrutinizer-ci.com/g/kytos-ng/of_multi_table/?branch=master
+.. |Tag| image:: https://img.shields.io/github/tag/kytos-ng/of_multi_table.svg
+    :target: https://github.com/kytos-ng/of_multi_table/tags
+.. |Coverage| image:: https://scrutinizer-ci.com/g/kytos-ng/of_multi_table/badges/coverage.png?b=master
+    :alt: Code coverage
+    :target: https://scrutinizer-ci.com/g/kytos-ng/of_multi_table/?branch=master
+.. |Quality| image:: https://scrutinizer-ci.com/g/kytos-ng/of_multi_table/badges/quality-score.png?b=master
+    :alt: Code-quality score
+    :target: https://scrutinizer-ci.com/g/kytos-ng/of_multi_table/?branch=master
