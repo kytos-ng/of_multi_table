@@ -3,14 +3,15 @@ FLOW_MANAGER_URL = "http://localhost:8181/api/kytos/flow_manager"
 COOKIE_PREFIX = 0xad
 
 # NApps that push flows and are subscribed to enable_table event
-SUBSCRIBED_NAPPS = {"coloring", "of_lldp", "mef_eline"}
+SUBSCRIBED_NAPPS = {"coloring", "of_lldp", "mef_eline", "telemetry_int"}
 
 DEFAULT_PIPELINE = {"multi_table": [{
     "table_id": 0,
     "napps_table_groups": {
         "coloring": ["base"],
         "of_lldp": ["base"],
-        "mef_eline": ["evpl", "epl"]
+        "mef_eline": ["evpl", "epl"],
+        "telemetry_int": ["base"]
         }
     }]}
 

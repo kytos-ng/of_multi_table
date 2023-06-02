@@ -107,7 +107,7 @@ class Main(KytosNApp):
         event = KytosEvent(name=event_name, content=content)
         self.controller.buffers.app.put(event)
 
-    @listen_to("kytos/(mef_eline|coloring|of_lldp).enable_table")
+    @listen_to("kytos/(mef_eline|telemetry_int|coloring|of_lldp).enable_table")
     def on_enable_table(self, event):
         """Listen for NApps responses"""
         self.handle_enable_table(event)
