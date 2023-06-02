@@ -7,27 +7,25 @@ from pydantic import ValidationError
 from controllers import PipelineController
 
 
-class TestController():
+class TestController:
     """Test the controller class"""
 
     def setup_method(self):
         """Execute steps before each test"""
         self.controller = PipelineController(MagicMock())
         self.pipeline = {
-            "multi_table": [{
+            "multi_table": [
+                {
                     "table_id": 0,
                     "description": "Table for testing",
                     "table_miss_flow": {
                         "priority": 0,
                         "match": {},
-                        "instructions": [{
-                            "instruction_type": "goto_table",
-                            "table_id": 1
-                        }]
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 1}
+                        ],
                     },
-                    "napps_table_groups": {
-                        "of_lldp": ["base"]
-                    }
+                    "napps_table_groups": {"of_lldp": ["base"]},
                 }
             ]
         }
@@ -46,7 +44,7 @@ class TestController():
         """Test get_active_pipeline"""
         self.controller.get_active_pipeline()
         args = self.controller.db.pipelines.find_one.call_args[0]
-        assert args[0]['status']['$ne'] == "disabled"
+        assert args[0]["status"]["$ne"] == "disabled"
 
     def test_get_pipelines(self):
         """Test get pipelines"""

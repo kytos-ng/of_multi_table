@@ -12,19 +12,29 @@ import httpx
 import tenacity
 from httpx import RequestError
 from pydantic import ValidationError
-from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
-                      wait_fixed)
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from kytos.core import KytosNApp, log, rest
 from kytos.core.events import KytosEvent
 from kytos.core.helpers import listen_to, load_spec, validate_openapi
-from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
-                                 error_msg, get_json_or_400)
+from kytos.core.rest_api import (
+    HTTPException,
+    JSONResponse,
+    Request,
+    error_msg,
+    get_json_or_400,
+)
 from kytos.core.retry import before_sleep
 
 from .controllers import PipelineController
-from .settings import (BATCH_INTERVAL, BATCH_SIZE, COOKIE_PREFIX,
-                       DEFAULT_PIPELINE, FLOW_MANAGER_URL, SUBSCRIBED_NAPPS)
+from .settings import (
+    BATCH_INTERVAL,
+    BATCH_SIZE,
+    COOKIE_PREFIX,
+    DEFAULT_PIPELINE,
+    FLOW_MANAGER_URL,
+    SUBSCRIBED_NAPPS,
+)
 
 
 class Main(KytosNApp):
@@ -115,7 +125,7 @@ class Main(KytosNApp):
     def handle_enable_table(self, event):
         """Handle NApps responses from enable_table
         Second, wait for all the napps to respond"""
-        napp = event.name.split('/')[1].split('.')[0]
+        napp = event.name.split("/")[1].split(".")[0]
         # Check against the last current table
         self.required_napps.remove(napp)
         if self.required_napps:
@@ -124,10 +134,11 @@ class Main(KytosNApp):
         self.get_flows_to_be_installed()
 
     @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_fixed(20),
-            before_sleep=before_sleep,
-            retry=retry_if_exception_type(RequestError))
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(20),
+        before_sleep=before_sleep,
+        retry=retry_if_exception_type(RequestError),
+    )
     def get_installed_flows(self) -> Optional[Dict]:
         """Get flows from flow_manager"""
         command = "v2/stored_flows?state=installed"
@@ -146,7 +157,7 @@ class Main(KytosNApp):
             # Default or enabled pipeline, not need to get flows
             return
 
-        pipeline_id = pipeline['id']
+        pipeline_id = pipeline["id"]
         if "disabl" in pipeline.get("status", ""):
             pipeline = self.default_pipeline
 
@@ -176,7 +187,7 @@ class Main(KytosNApp):
                     delete = {
                         "cookie": int(COOKIE_PREFIX << 56),
                         "cookie_mask": int(0xFF00000000000000),
-                        'table_id': flow["flow"]["table_id"]
+                        "table_id": flow["flow"]["table_id"],
                     }
                     delete_flows[switch].append(delete)
                     continue
@@ -187,19 +198,19 @@ class Main(KytosNApp):
                 if expected_table_id != flow["flow"]["table_id"]:
                     # Get key-value from flow to be sent to flow_manager
                     delete = {
-                        'cookie': flow["flow"].get('cookie'),
-                        'cookie_mask': int(0xFFFFFFFFFFFFFFFF),
-                        'table_id': flow["flow"]["table_id"]
+                        "cookie": flow["flow"].get("cookie"),
+                        "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
+                        "table_id": flow["flow"]["table_id"],
                     }
-                    if flow["flow"].get('match'):
-                        delete['match'] = flow["flow"].get('match')
+                    if flow["flow"].get("match"):
+                        delete["match"] = flow["flow"].get("match")
                     delete_flows[switch].append(delete)
                     # Change table_id before being added
                     flow["flow"].update({"table_id": expected_table_id})
                     install_flows[switch].append(flow["flow"])
         log.info(f"of_multi_table pushing flows, pipeline: {pipeline}")
-        self.send_flows(delete_flows, 'delete')
-        self.send_flows(install_flows, 'install')
+        self.send_flows(delete_flows, "delete")
+        self.send_flows(install_flows, "install")
         if pipeline.get("status") is None:
             self.pipeline_controller.disabled_pipeline(pipeline_id)
             msg = f"Pipeline {pipeline_id} disabled"
@@ -220,19 +231,19 @@ class Main(KytosNApp):
                 miss_flow = table.get("table_miss_flow")
                 if miss_flow:
                     flow = {
-                        'priority': miss_flow.get('priority', 0),
-                        'cookie': cookie,
-                        'owner': 'of_multi_table',
-                        'table_group': 'base',
-                        'table_id': table['table_id'],
+                        "priority": miss_flow.get("priority", 0),
+                        "cookie": cookie,
+                        "owner": "of_multi_table",
+                        "table_group": "base",
+                        "table_id": table["table_id"],
                     }
-                    if miss_flow.get('match'):
-                        flow['match'] = miss_flow.get('match')
-                    instruction = miss_flow.get('instructions')
+                    if miss_flow.get("match"):
+                        flow["match"] = miss_flow.get("match")
+                    instruction = miss_flow.get("instructions")
                     if instruction and instruction[0]:
-                        flow['instructions'] = miss_flow.get('instructions')
+                        flow["instructions"] = miss_flow.get("instructions")
                     install_flows[switch].append(flow)
-        self.send_flows(install_flows, 'install')
+        self.send_flows(install_flows, "install")
 
     def send_flows(self, flows: Dict, action: str, force: bool = True):
         """Send flows to flow_manager through event"""
@@ -245,9 +256,9 @@ class Main(KytosNApp):
                     continue
                 name = f"kytos.flow_manager.flows.{action}"
                 content = {
-                    'dpid': dpid,
-                    'flow_dict': {"flows": flows[dpid][:offset]},
-                    'force': force
+                    "dpid": dpid,
+                    "flow_dict": {"flows": flows[dpid][:offset]},
+                    "force": force,
                 }
                 event = KytosEvent(name=name, content=content)
                 self.controller.buffers.app.put(event)
