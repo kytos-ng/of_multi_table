@@ -3,7 +3,7 @@
 .. raw:: html
 
   <div align="center">
-    <h1><code>kytos-ng/of_multi_table</code></h1>
+    <h1><code>kytos/of_multi_table</code></h1>
 
     <strong>This NApp implements Oplenflow multi tables</strong>
 
