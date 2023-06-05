@@ -1,7 +1,9 @@
+"""DB Models"""
+# pylint: disable=no-self-argument,invalid-name,no-name-in-module
 from datetime import datetime
 from typing import Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, validator, conint, root_validator
+from pydantic import BaseModel, Field, conint, root_validator, validator
 
 
 class DocumentBaseModel(BaseModel):
@@ -19,6 +21,7 @@ class DocumentBaseModel(BaseModel):
         if "exclude" in kwargs and "_id" in kwargs["exclude"]:
             del values["_id"]
         return values
+
 
 class MatchSubDoc(BaseModel):
     """Match DB SubDocument Model."""
@@ -78,14 +81,18 @@ class MatchSubDoc(BaseModel):
                 )
         return v
 
+
 class TableMissDoc(BaseModel):
     """Base model for Table miss flow"""
+
     priority: int
     instructions: Optional[List[dict]]
     match: Optional[MatchSubDoc]
 
+
 class MultitableDoc(BaseModel):
     """Base model for Multitable"""
+
     table_id: conint(ge=0, le=254)
     table_miss_flow: Optional[TableMissDoc]
     description: Optional[str]
@@ -102,13 +109,17 @@ class MultitableDoc(BaseModel):
         for instruction in instructions:
             miss_table_id = instruction.get("table_id")
             if miss_table_id is not None and miss_table_id <= table_id:
-                msg = f"Table {table_id} has a lower or equal " \
-                      f"table_id {miss_table_id} in instructions"
+                msg = (
+                    f"Table {table_id} has a lower or equal "
+                    f"table_id {miss_table_id} in instructions"
+                )
                 raise ValueError(msg)
         return values
 
+
 class PipelineBaseDoc(DocumentBaseModel):
     """Base model for Pipeline documents"""
+
     status = "disabled"
     multi_table: List[MultitableDoc]
 
@@ -124,19 +135,19 @@ class PipelineBaseDoc(DocumentBaseModel):
             if table_id in id_set:
                 msg = f"Table id {table_id} repeated"
                 raise ValueError(msg)
-            else:
-                id_set.add(table_id)
+            id_set.add(table_id)
             for napp in table_groups:
                 if napp not in content:
                     content[napp] = set(table_groups[napp])
                 else:
                     repeated = content[napp] & set(table_groups[napp])
                     if repeated:
-                        msg = f"Repeated {napp} table groups, {repeated}" \
-                              f" in table id: {table_id}"
+                        msg = (
+                            f"Repeated {napp} table groups, {repeated}"
+                            f" in table id: {table_id}"
+                        )
                         raise ValueError(msg)
-                    else:
-                        content[napp] |= set(table_groups[napp])
+                    content[napp] |= set(table_groups[napp])
         return pipeline
 
     @staticmethod
@@ -148,5 +159,5 @@ class PipelineBaseDoc(DocumentBaseModel):
             "multi_table": 1,
             "status": 1,
             "inserted_at": 1,
-            "updated_at": 1
+            "updated_at": 1,
         }

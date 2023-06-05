@@ -4,26 +4,24 @@ from db.models import PipelineBaseDoc
 from pydantic import ValidationError
 
 
-class TestDBModels():
+class TestDBModels:
     """Test the DB models"""
 
     def setup_method(self):
         """Execute steps before each test"""
         self.pipeline = {
-            "multi_table": [{
+            "multi_table": [
+                {
                     "table_id": 0,
                     "description": "Table for testing",
                     "table_miss_flow": {
                         "priority": 0,
                         "match": {},
-                        "instructions": [{
-                            "instruction_type": "goto_table",
-                            "table_id": 1
-                        }]
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 1}
+                        ],
                     },
-                    "napps_table_groups": {
-                        "of_lldp": ["base"]
-                    }
+                    "napps_table_groups": {"of_lldp": ["base"]},
                 }
             ]
         }
@@ -42,55 +40,44 @@ class TestDBModels():
 
     def test_validate_table_group(self):
         """Test validate table group"""
-        pipeline = {"multi_table": [
-            {
-                "table_id": 0,
-                "table_miss_flow": {
-                    "priority": 0,
-                    "instructions": [{
-                        "instruction_type": "goto_table",
-                        "table_id": 1
-                    }]
+        pipeline = {
+            "multi_table": [
+                {
+                    "table_id": 0,
+                    "table_miss_flow": {
+                        "priority": 0,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 1}
+                        ],
+                    },
                 },
-            },
-            {
-                "table_id": 1,
-                "table_miss_flow": {
-                    "priority": 0,
-                    "instructions": [{
-                        "instruction_type": "goto_table",
-                        "table_id": 1
-                    }]
-                }
-            }
-        ]}
+                {
+                    "table_id": 1,
+                    "table_miss_flow": {
+                        "priority": 0,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 1}
+                        ],
+                    },
+                },
+            ]
+        }
         with pytest.raises(ValidationError):
             PipelineBaseDoc(**pipeline)
 
     def test_validate_intructions(self):
         """Test validate instructions"""
-        pipeline = {"multi_table": [
-            {
-                "table_id": 0,
-                "napps_table_groups": {
-                    "mef_eline": ["epl"]
-                }
-            },
-            {
-                "table_id": 1,
-                "napps_table_groups": {
-                    "mef_eline": ["evpl", "epl"]
-                }
-            }
-        ]}
+        pipeline = {
+            "multi_table": [
+                {"table_id": 0, "napps_table_groups": {"mef_eline": ["epl"]}},
+                {"table_id": 1, "napps_table_groups": {"mef_eline": ["evpl", "epl"]}},
+            ]
+        }
         with pytest.raises(ValidationError):
             PipelineBaseDoc(**pipeline)
 
     def test_validate_table_id(self):
         """Test validate table id"""
-        pipeline = {"multi_table": [
-            {"table_id": 1},
-            {"table_id": 1}
-        ]}
+        pipeline = {"multi_table": [{"table_id": 1}, {"table_id": 1}]}
         with pytest.raises(ValidationError):
             PipelineBaseDoc(**pipeline)

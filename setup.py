@@ -22,8 +22,8 @@ if "bdist_wheel" in sys.argv:
 # Paths setup with virtualenv detection
 BASE_ENV = Path(os.environ.get("VIRTUAL_ENV", "/"))
 
-NAPP_NAME = 'of_multi_table'
-NAPP_VERSION = '0.1'
+NAPP_NAME = "of_multi_table"
+NAPP_VERSION = "0.1"
 
 # Kytos var folder
 VAR_PATH = BASE_ENV / "var" / "lib" / "kytos"
@@ -103,7 +103,7 @@ class Test(TestCommand):
             check_call(cmd, shell=True)
         except CalledProcessError as exc:
             print(exc)
-            print('Unit tests failed. Fix the errors above and try again.')
+            print("Unit tests failed. Fix the errors above and try again.")
             sys.exit(-1)
 
 
@@ -119,7 +119,7 @@ class TestCoverage(Test):
             check_call(cmd, shell=True)
         except CalledProcessError as exc:
             print(exc)
-            print('Coverage tests failed. Fix the errors above and try again.')
+            print("Coverage tests failed. Fix the errors above and try again.")
             sys.exit(-1)
 
 
@@ -129,16 +129,9 @@ class Linter(SimpleCommand):
     description = "lint Python source code"
 
     def run(self):
-        """Run Yala."""
+        """Run yala."""
         print("Yala is running. It may take several seconds...")
-        try:
-            cmd = "yala *.py tests"
-            check_call(cmd, shell=True)
-            print("No linter error found.")
-        except RuntimeError as error:
-            print("Linter check failed. Fix the error(s) above and try again.")
-            print(error)
-            sys.exit(-1)
+        check_call("yala *.py controllers db tests", shell=True)
 
 
 # pylint: disable=too-few-public-methods
@@ -154,9 +147,6 @@ class KytosInstall:
             src = ENABLED_PATH / napp_path
             dst = INSTALLED_PATH / napp_path
             symlink_if_different(src, dst)
-
-    def __str__(self):
-        return self.__class__.__name__
 
 
 class InstallMode(install):
@@ -252,19 +242,15 @@ def symlink_if_different(path, target):
 
 def read_version_from_json():
     """Read the NApp version from NApp kytos.json file."""
-    file = Path('kytos.json')
+    file = Path("kytos.json")
     metadata = json.loads(file.read_text(encoding="utf8"))
-    return metadata['version']
+    return metadata["version"]
 
 
 def read_requirements(path="requirements/run.txt"):
     """Read requirements file and return a list."""
     with open(path, "r", encoding="utf8") as file:
-        return [
-            line.strip()
-            for line in file.readlines()
-            if not line.startswith("#")
-        ]
+        return [line.strip() for line in file.readlines() if not line.startswith("#")]
 
 
 setup(
