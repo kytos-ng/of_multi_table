@@ -6,7 +6,7 @@ This NApp implements Oplenflow multi tables
 # pylint: disable=attribute-defined-outside-init
 import pathlib
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, ValuesView
 
 import httpx
 import tenacity
@@ -182,15 +182,6 @@ class Main(KytosNApp):
             install_flows[switch] = []
             for flow in flows_by_swich[switch]:
                 owner = flow["flow"].get("owner")
-                if owner == "of_multi_table":
-                    # To allow dynamic enabling, delete all miss flows
-                    delete = {
-                        "cookie": int(COOKIE_PREFIX << 56),
-                        "cookie_mask": int(0xFF00000000000000),
-                        "table_id": flow["flow"]["table_id"],
-                    }
-                    delete_flows[switch].append(delete)
-                    continue
                 if owner not in set_up:
                     continue
                 expected_table_id = set_up[owner][flow["flow"]["table_group"]]
@@ -208,41 +199,117 @@ class Main(KytosNApp):
                     # Change table_id before being added
                     flow["flow"].update({"table_id": expected_table_id})
                     install_flows[switch].append(flow["flow"])
+
         log.info(f"of_multi_table pushing flows, pipeline: {pipeline}")
+        self.manage_miss_flows(pipeline, flows_by_swich)
         self.send_flows(delete_flows, "delete")
         self.send_flows(install_flows, "install")
+
         if pipeline.get("status") is None:
             self.pipeline_controller.disabled_pipeline(pipeline_id)
             msg = f"Pipeline {pipeline_id} disabled"
             log.debug(f"of_multi_table result {msg}")
         else:
-            self.install_miss_flows(pipeline)
             self.pipeline_controller.enabled_pipeline(pipeline_id)
             msg = f"Pipeline {pipeline_id} enabled"
             log.debug(f"of_multi_table result {msg}")
 
-    def install_miss_flows(self, pipeline: dict):
+    @staticmethod
+    def get_miss_flows(flows_by_swich: Dict[str, Dict]):
+        """Get miss flows reformated as {"table_id": {flows}} from
+        a single switch"""
+        miss_flows = {}
+        flow_ids = set()
+        # Keys needed to compare miss flow entries, except table_id
+        compare = {"priority", "instructions", "match"}
+        for _, flows in flows_by_swich.items():
+            for flow in flows:
+                owner = flow["flow"].get("owner")
+                if owner == "of_multi_table":
+                    flow = flow["flow"]
+                    miss_flows[flow["table_id"]] = {
+                        key: flow[key] for key in compare if flow.get(key) is not None
+                    }
+                    flow_ids.add(flow["table_id"])
+            # Miss flows are the same in all switches
+            break
+        return miss_flows, flow_ids
+
+    def manage_miss_flows(self, pipeline: Dict, flows_by_swich: Dict[str, Dict]):
+        """Determine whether to install and/or delete miss_flows"""
+        if not flows_by_swich:
+            return
+        miss_table = {}
+        table_ids = set()
+        miss_flows, flow_ids = self.get_miss_flows(flows_by_swich)
+        for table in pipeline["multi_table"]:
+            table_miss_flow = table.get("table_miss_flow")
+            if table_miss_flow:
+                miss_table[table["table_id"]] = table_miss_flow
+                table_ids.add(table["table_id"])
+
+        if miss_flows:
+            # There are miss flows, they could be changed
+            # Tables that do not have miss flows
+            install = table_ids - flow_ids
+            # Tables that have extra miss flows
+            delete = flow_ids - table_ids
+            # Tables that need to modify its miss flows
+            modify = set()
+            for id_ in table_ids - install:
+                if miss_flows[id_] != miss_table[id_]:
+                    modify.add(id_)
+            self.delete_miss_flows(delete | modify)
+            self.install_miss_flows(miss_table, install | modify)
+        else:
+            # only install miss flows
+            self.install_miss_flows(miss_table, table_ids)
+
+    def delete_miss_flows(self, ids: Union[set[int], list[int], ValuesView[int]]):
+        """Delete miss flows"""
+        if not ids:
+            return
+        delete_flows = {}
+        for switch in self.controller.switches:
+            delete_flows[switch] = []
+            cookie = self.get_cookie(switch)
+            for table_id in ids:
+                delete = {
+                    "cookie": cookie,
+                    "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
+                    "table_id": table_id,
+                }
+
+                delete_flows[switch].append(delete)
+        self.send_flows(delete_flows, "delete")
+
+    def install_miss_flows(
+        self,
+        miss_table: Dict[int, Dict],
+        ids: Union[set[int], list[int], ValuesView[int]],
+    ):
         """Install miss flow entry to a switch"""
+        if not ids:
+            return
         install_flows = {}
         for switch in self.controller.switches:
             install_flows[switch] = []
             cookie = self.get_cookie(switch)
-            for table in pipeline["multi_table"]:
-                miss_flow = table.get("table_miss_flow")
-                if miss_flow:
-                    flow = {
-                        "priority": miss_flow.get("priority", 0),
-                        "cookie": cookie,
-                        "owner": "of_multi_table",
-                        "table_group": "base",
-                        "table_id": table["table_id"],
-                    }
-                    if miss_flow.get("match"):
-                        flow["match"] = miss_flow.get("match")
-                    instruction = miss_flow.get("instructions")
-                    if instruction and instruction[0]:
-                        flow["instructions"] = miss_flow.get("instructions")
-                    install_flows[switch].append(flow)
+            for table_id in ids:
+                miss_flow = miss_table[table_id]
+                flow = {
+                    "priority": miss_flow.get("priority", 0),
+                    "cookie": cookie,
+                    "owner": "of_multi_table",
+                    "table_group": "base",
+                    "table_id": table_id,
+                }
+                if miss_flow.get("match"):
+                    flow["match"] = miss_flow.get("match")
+                instruction = miss_flow.get("instructions")
+                if instruction and instruction[0]:
+                    flow["instructions"] = miss_flow.get("instructions")
+                install_flows[switch].append(flow)
         self.send_flows(install_flows, "install")
 
     def send_flows(self, flows: Dict, action: str, force: bool = True):
