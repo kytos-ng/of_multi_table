@@ -6,7 +6,7 @@ This NApp implements Oplenflow multi tables
 # pylint: disable=attribute-defined-outside-init
 import pathlib
 import time
-from typing import Dict, Optional, Union, ValuesView
+from typing import Dict, Iterable, Optional
 
 import httpx
 import tenacity
@@ -215,11 +215,13 @@ class Main(KytosNApp):
             log.debug(f"of_multi_table result {msg}")
 
     @staticmethod
-    def get_miss_flows(flows_by_swich: Dict[str, Dict]):
-        """Get miss flows reformated as {"table_id": {flows}} from
+    def get_miss_flows_installed(
+        flows_by_swich: Dict[str, Dict]
+    ) -> tuple[dict[int, dict], set[str]]:
+        """Get miss flows reformated as {"table_id": {flow}} from
         a single switch"""
         miss_flows = {}
-        flow_ids = set()
+        stored_table_ids = set()
         # Keys needed to compare miss flow entries, except table_id
         compare = {"priority", "instructions", "match"}
         for _, flows in flows_by_swich.items():
@@ -230,50 +232,55 @@ class Main(KytosNApp):
                     miss_flows[flow["table_id"]] = {
                         key: flow[key] for key in compare if flow.get(key) is not None
                     }
-                    flow_ids.add(flow["table_id"])
+                    stored_table_ids.add(flow["table_id"])
             # Miss flows are the same in all switches
             break
-        return miss_flows, flow_ids
+        return miss_flows, stored_table_ids
 
     def manage_miss_flows(self, pipeline: Dict, flows_by_swich: Dict[str, Dict]):
         """Determine whether to install and/or delete miss_flows"""
-        if not flows_by_swich:
+        if not self.controller.switches:
             return
         miss_table = {}
-        table_ids = set()
-        miss_flows, flow_ids = self.get_miss_flows(flows_by_swich)
+        pipeline_table_ids = set()
+        miss_flows, stored_table_ids = self.get_miss_flows_installed(flows_by_swich)
         for table in pipeline["multi_table"]:
             table_miss_flow = table.get("table_miss_flow")
             if table_miss_flow:
                 miss_table[table["table_id"]] = table_miss_flow
-                table_ids.add(table["table_id"])
+                pipeline_table_ids.add(table["table_id"])
 
-        if miss_flows:
-            # There are miss flows, they could be changed
-            # Tables that do not have miss flows
-            install = table_ids - flow_ids
-            # Tables that have extra miss flows
-            delete = flow_ids - table_ids
+        if stored_table_ids and pipeline_table_ids:
+            # Miss flows may need to be modified
+            # Tables that need miss flows installed
+            install = pipeline_table_ids - stored_table_ids
+            # Tables that have extra miss flows, delete them
+            delete = stored_table_ids - pipeline_table_ids
             # Tables that need to modify its miss flows
             modify = set()
-            for id_ in table_ids - install:
+            for id_ in pipeline_table_ids - install:
                 if miss_flows[id_] != miss_table[id_]:
                     modify.add(id_)
             self.delete_miss_flows(delete | modify)
             self.install_miss_flows(miss_table, install | modify)
-        else:
-            # only install miss flows
-            self.install_miss_flows(miss_table, table_ids)
 
-    def delete_miss_flows(self, ids: Union[set[int], list[int], ValuesView[int]]):
+        elif not stored_table_ids:
+            # Not miss flows installed, install new miss flows from pipeline
+            self.install_miss_flows(miss_table, pipeline_table_ids)
+
+        elif not pipeline_table_ids:
+            # No miss flows in pipeline, delete all miss flows installed
+            self.delete_miss_flows(stored_table_ids)
+
+    def delete_miss_flows(self, table_ids: Iterable[int]):
         """Delete miss flows"""
-        if not ids:
+        if not table_ids:
             return
         delete_flows = {}
         for switch in self.controller.switches:
             delete_flows[switch] = []
             cookie = self.get_cookie(switch)
-            for table_id in ids:
+            for table_id in table_ids:
                 delete = {
                     "cookie": cookie,
                     "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
@@ -286,16 +293,16 @@ class Main(KytosNApp):
     def install_miss_flows(
         self,
         miss_table: Dict[int, Dict],
-        ids: Union[set[int], list[int], ValuesView[int]],
+        table_ids: Iterable[int],
     ):
         """Install miss flow entry to a switch"""
-        if not ids:
+        if not table_ids:
             return
         install_flows = {}
         for switch in self.controller.switches:
             install_flows[switch] = []
             cookie = self.get_cookie(switch)
-            for table_id in ids:
+            for table_id in table_ids:
                 miss_flow = miss_table[table_id]
                 flow = {
                     "priority": miss_flow.get("priority", 0),
