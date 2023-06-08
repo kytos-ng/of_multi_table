@@ -322,28 +322,34 @@ class TestMain:
                         "match": {"in_port": 1, "dl_vlan": 0},
                     },
                 },
-                {
-                    "table_id": 2
-                }
+                {"table_id": 2},
             ]
         }
-        flows_by_switch = {"00:00:00:00:00:00:00:01": [{"flow":
-            {
-                "owner": "of_multi_table",
-                "table_id": 0,
-                "priority": 200,
-                "instructions": [{"instruction_type": "goto_table", "table_id": 1}]
-            }
-            
-        },
-            {"flow":{
-                "owner": "of_multi_table",
-                "table_id": 1,
-                "priority": 0,
-                "instructions": [{"instruction_type": "goto_table", "table_id": 2}],
-                "match": {"in_port": 1, "dl_vlan": 0},
-            }}
-        ]}
+        flows_by_switch = {
+            "00:00:00:00:00:00:00:01": [
+                {
+                    "flow": {
+                        "owner": "of_multi_table",
+                        "table_id": 0,
+                        "priority": 200,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 1}
+                        ],
+                    }
+                },
+                {
+                    "flow": {
+                        "owner": "of_multi_table",
+                        "table_id": 1,
+                        "priority": 0,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 2}
+                        ],
+                        "match": {"in_port": 1, "dl_vlan": 0},
+                    }
+                },
+            ]
+        }
         miss_flows, stored_tables = Main.get_miss_flows_installed(flows_by_switch)
         self.napp.get_miss_flows_installed = MagicMock()
         self.napp.get_miss_flows_installed.return_value = (miss_flows, stored_tables)
