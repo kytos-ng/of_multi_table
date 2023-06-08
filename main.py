@@ -239,8 +239,6 @@ class Main(KytosNApp):
 
     def manage_miss_flows(self, pipeline: Dict, flows_by_swich: Dict[str, Dict]):
         """Determine whether to install and/or delete miss_flows"""
-        if not self.controller.switches:
-            return
         miss_table = {}
         pipeline_table_ids = set()
         miss_flows, stored_table_ids = self.get_miss_flows_installed(flows_by_swich)

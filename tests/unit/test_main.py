@@ -174,17 +174,6 @@ class TestMain:
 
     @patch("napps.kytos.of_multi_table.main.Main.delete_miss_flows")
     @patch("napps.kytos.of_multi_table.main.Main.install_miss_flows")
-    async def test_manage_miss_flows_no_switches(self, mock_install, mock_delete):
-        """Test manage miss flows with no switches"""
-        pipeline = {"multi_table": [{"table_id": 1}]}
-        self.napp.controller.switches = {}
-        flows_by_switch = {}
-        self.napp.manage_miss_flows(pipeline, flows_by_switch)
-        assert mock_install.call_count == 0
-        assert mock_delete.call_count == 0
-
-    @patch("napps.kytos.of_multi_table.main.Main.delete_miss_flows")
-    @patch("napps.kytos.of_multi_table.main.Main.install_miss_flows")
     async def test_manage_miss_flows_no_miss_installed(self, mock_install, mock_delete):
         """Test manage miss flows with no miss flows installed"""
         pipeline = {
