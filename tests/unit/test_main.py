@@ -1,9 +1,10 @@
 """Test the Main class"""
 from unittest.mock import MagicMock, patch
 
-from pydantic import BaseModel, ValidationError
-from kytos.lib.helpers import get_controller_mock, get_test_client
 from napps.kytos.of_multi_table.main import Main
+from pydantic import BaseModel, ValidationError
+
+from kytos.lib.helpers import get_controller_mock, get_test_client
 
 
 class TestMain:
@@ -14,6 +15,7 @@ class TestMain:
         Main.get_pipeline_controller = MagicMock()
         controller = get_controller_mock()
         self.napp = Main(controller)
+        self.napp.controller.switches = {"00:00:00:00:00:00:00:01"}
         self.api_client = get_test_client(controller, self.napp)
         self.base_endpoint = "kytos/of_multi_table/v1"
 
@@ -101,11 +103,11 @@ class TestMain:
         assert mock_flows_to_be_installed.call_count == 1
 
     @patch("napps.kytos.of_multi_table.main.Main.send_flows")
-    @patch("napps.kytos.of_multi_table.main.Main.install_miss_flows")
+    @patch("napps.kytos.of_multi_table.main.Main.manage_miss_flows")
     @patch("napps.kytos.of_multi_table.main.Main.get_installed_flows")
     async def test_get_flows_to_be_installed(self, *args):
         """Test get flows from flow manager to be installed"""
-        (mock_flows, mock_install, mock_send) = args
+        (mock_flows, mock_manage_miss, mock_send) = args
         controller = self.napp.pipeline_controller
 
         # Disabling pipeline
@@ -134,7 +136,7 @@ class TestMain:
         }
 
         self.napp.get_flows_to_be_installed()
-        assert mock_install.call_count == 0
+        assert mock_manage_miss.call_count == 1
         assert controller.enabled_pipeline.call_count == 0
 
         args = mock_send.call_args[0]
@@ -154,7 +156,7 @@ class TestMain:
         }
         mock_flows.return_value = {"00:00:00:00:00:00:00:01": [flow_of_lldp]}
         self.napp.get_flows_to_be_installed()
-        assert mock_install.call_count == 1
+        assert mock_manage_miss.call_count == 2
         assert controller.enabled_pipeline.call_count == 1
 
         args = mock_send.call_args[0]
@@ -166,34 +168,254 @@ class TestMain:
         # Enabled pipeline
         controller.get_active_pipeline.return_value = {"status": "enabled"}
         self.napp.get_flows_to_be_installed()
-        assert mock_install.call_count == 1
+        assert mock_manage_miss.call_count == 2
         assert controller.enabled_pipeline.call_count == 1
         assert mock_send.call_count == 4
+
+    @patch("napps.kytos.of_multi_table.main.Main.delete_miss_flows")
+    @patch("napps.kytos.of_multi_table.main.Main.install_miss_flows")
+    async def test_manage_miss_flows_no_miss_installed(self, mock_install, mock_delete):
+        """Test manage miss flows with no miss flows installed"""
+        pipeline = {
+            "multi_table": [
+                {
+                    "table_id": 1,
+                    "table_miss_flow": {
+                        "priority": 0,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 2}
+                        ],
+                    },
+                }
+            ],
+        }
+        flows_by_switch = {"00:00:00:00:00:00:00:01": [{"flow": {"owner": "of_lldp"}}]}
+        self.napp.get_miss_flows_installed = MagicMock()
+        self.napp.get_miss_flows_installed.return_value = ({}, set())
+        self.napp.manage_miss_flows(pipeline, flows_by_switch)
+        expected_arg = {
+            1: {
+                "priority": 0,
+                "instructions": [{"instruction_type": "goto_table", "table_id": 2}],
+            }
+        }
+        assert mock_install.call_count == 1
+        args = mock_install.call_args[0]
+        assert args[0] == expected_arg
+        assert args[1] == expected_arg.keys()
+        assert mock_delete.call_count == 0
+        assert self.napp.get_miss_flows_installed.call_count == 1
+
+    @patch("napps.kytos.of_multi_table.main.Main.delete_miss_flows")
+    @patch("napps.kytos.of_multi_table.main.Main.install_miss_flows")
+    async def test_manage_miss_flows_no_miss_pipeline(self, mock_install, mock_delete):
+        """Test manage miss flows with no miss flows in pipeline"""
+        pipeline = {"multi_table": [{"table_id": 1}]}
+        flows_by_switch = {
+            "00:00:00:00:00:00:00:01": [{"flow": {"owner": "of_multi_table"}}]
+        }
+
+        flows_by_switch = {
+            "00:00:00:00:00:00:00:01": [
+                {"flow": {"owner": "of_multi_table", "table_id": 0, "priority": 100}}
+            ]
+        }
+        miss_flows = {0: {"priority": 100}}
+        self.napp.get_miss_flows_installed = MagicMock()
+        self.napp.get_miss_flows_installed.return_value = (miss_flows, {0})
+        self.napp.manage_miss_flows(pipeline, flows_by_switch)
+        assert mock_install.call_count == 0
+        assert mock_delete.call_count == 1
+        args = mock_delete.call_args[0]
+        assert args[0] == {0}
+        assert self.napp.get_miss_flows_installed.call_count == 1
+
+    @patch("napps.kytos.of_multi_table.main.Main.delete_miss_flows")
+    @patch("napps.kytos.of_multi_table.main.Main.install_miss_flows")
+    async def test_manage_miss_flows(self, mock_install, mock_delete):
+        """Test manage miss flows"""
+        pipeline = {
+            "multi_table": [
+                {
+                    "table_id": 1,
+                    "table_miss_flow": {
+                        "priority": 0,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 2}
+                        ],
+                    },
+                },
+                {
+                    "table_id": 2,
+                    "table_miss_flow": {
+                        "priority": 0,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 5}
+                        ],
+                    },
+                },
+                {
+                    "table_id": 5,
+                    "table_miss_flow": {"priority": 99, "instructions": [{}]},
+                },
+            ]
+        }
+        dpid = "00:00:00:00:00:00:00:01"
+        flows_by_switch = {dpid: []}
+        for table_id in range(4):
+            flow = {
+                "flow": {
+                    "owner": "of_multi_table",
+                    "priority": 0,
+                    "instructions": [
+                        {"instruction_type": "goto_table", "table_id": table_id + 1}
+                    ],
+                    "table_id": table_id,
+                }
+            }
+            flows_by_switch[dpid].append(flow)
+        self.napp.get_miss_flows_installed = MagicMock()
+        miss_flows, stored_tables = Main.get_miss_flows_installed(flows_by_switch)
+        self.napp.get_miss_flows_installed.return_value = (miss_flows, stored_tables)
+        self.napp.manage_miss_flows(pipeline, flows_by_switch)
+        assert mock_install.call_count == 1
+        args = mock_install.call_args[0]
+        assert args[1] == {2, 5}
+        assert mock_delete.call_count == 1
+        args = mock_delete.call_args[0]
+        assert args[0] == {0, 2, 3}
+        assert self.napp.get_miss_flows_installed.call_count == 1
+
+    @patch("napps.kytos.of_multi_table.main.Main.delete_miss_flows")
+    @patch("napps.kytos.of_multi_table.main.Main.install_miss_flows")
+    async def test_manage_miss_flows_no_changes(self, mock_install, mock_delete):
+        """Test manage miss flows where no changes were made"""
+        pipeline = {
+            "multi_table": [
+                {
+                    "table_id": 0,
+                    "table_miss_flow": {
+                        "priority": 200,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 1}
+                        ],
+                    },
+                },
+                {
+                    "table_id": 1,
+                    "table_miss_flow": {
+                        "priority": 0,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 2}
+                        ],
+                        "match": {"in_port": 1, "dl_vlan": 0},
+                    },
+                },
+                {"table_id": 2},
+            ]
+        }
+        flows_by_switch = {
+            "00:00:00:00:00:00:00:01": [
+                {
+                    "flow": {
+                        "owner": "of_multi_table",
+                        "table_id": 0,
+                        "priority": 200,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 1}
+                        ],
+                    }
+                },
+                {
+                    "flow": {
+                        "owner": "of_multi_table",
+                        "table_id": 1,
+                        "priority": 0,
+                        "instructions": [
+                            {"instruction_type": "goto_table", "table_id": 2}
+                        ],
+                        "match": {"in_port": 1, "dl_vlan": 0},
+                    }
+                },
+            ]
+        }
+        miss_flows, stored_tables = Main.get_miss_flows_installed(flows_by_switch)
+        self.napp.get_miss_flows_installed = MagicMock()
+        self.napp.get_miss_flows_installed.return_value = (miss_flows, stored_tables)
+        self.napp.manage_miss_flows(pipeline, flows_by_switch)
+        assert mock_install.call_count == 1
+        args = mock_install.call_args[0]
+        assert args[1] == set()
+        assert mock_delete.call_count == 1
+        args = mock_delete.call_args[0]
+        assert args[0] == set()
+        assert self.napp.get_miss_flows_installed.call_count == 1
+
+    async def test_get_miss_flows_installed(self):
+        """Test get miss flows"""
+        dpid = "00:00:00:00:00:00:00:01"
+        flows_by_switch = {dpid: []}
+        expected_flows = {}
+        for table_id in range(4):
+            flow = {
+                "flow": {
+                    "owner": "of_multi_table",
+                    "priority": 0,
+                    "instructions": [
+                        {"instruction_type": "goto_table", "table_id": table_id + 1}
+                    ],
+                    "table_id": table_id,
+                    "match": {"in_port": 1, "dl_vlan": 0},
+                }
+            }
+            flows_by_switch[dpid].append(flow)
+            expected_flows[table_id] = {
+                "priority": 0,
+                "instructions": [
+                    {"instruction_type": "goto_table", "table_id": table_id + 1}
+                ],
+                "match": {"in_port": 1, "dl_vlan": 0},
+            }
+        miss_flows, flow_ids = Main.get_miss_flows_installed(flows_by_switch)
+        assert miss_flows == expected_flows
+        assert flow_ids == {0, 1, 2, 3}
+
+    @patch("napps.kytos.of_multi_table.main.Main.get_cookie")
+    @patch("napps.kytos.of_multi_table.main.Main.send_flows")
+    async def test_delete_miss_flows(self, mock_send, mock_cookie):
+        """Test delete miss flows"""
+        mock_cookie.return_value = 999
+        expected_flows = {
+            "00:00:00:00:00:00:00:01": [
+                {
+                    "cookie": 999,
+                    "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
+                    "table_id": 0,
+                },
+                {
+                    "cookie": 999,
+                    "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
+                    "table_id": 2,
+                },
+            ]
+        }
+        self.napp.delete_miss_flows({0, 2})
+        assert mock_send.call_count == 1
+        assert mock_send.call_args[0][0] == expected_flows
 
     @patch("napps.kytos.of_multi_table.main.Main.get_cookie")
     @patch("napps.kytos.of_multi_table.main.Main.send_flows")
     async def test_install_miss_flows(self, mock_send, mock_cookie):
         """Test install miss flows"""
         pipeline = {
-            "multi_table": [
-                {
-                    "table_id": 2,
-                    "napps_table_groups": {"of_lldp": ["base"]},
-                    "table_miss_flow": {
-                        "priority": 10,
-                        "instructions": [
-                            {"instruction_type": "goto_table", "table_id": 3}
-                        ],
-                        "match": {"in_port": 1},
-                    },
-                }
-            ],
-            "id": "mocked_pipeline",
-            "status": "enabling",
+            2: {
+                "priority": 10,
+                "instructions": [{"instruction_type": "goto_table", "table_id": 3}],
+                "match": {"in_port": 1},
+            }
         }
         mock_cookie.return_value = 999
-        self.napp.controller.switches = {"00:00:00:00:00:00:00:01"}
-        self.napp.install_miss_flows(pipeline)
+        self.napp.install_miss_flows(pipeline, {2})
         args = mock_send.call_args[0]
         expected_arg = {
             "00:00:00:00:00:00:00:01": [
