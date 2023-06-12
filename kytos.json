@@ -3,7 +3,7 @@
   "username": "kytos",
   "name": "of_multi_table",
   "description": "This NApp implements Oplenflow multi tables",
-  "version": "1.0",
+  "version": "2023.1.0",
   "napp_dependencies": ["kytos/flow_manager", "kytos/of_core"],
   "license": "MIT",
   "tags": [],
