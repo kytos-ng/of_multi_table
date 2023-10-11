@@ -1,6 +1,10 @@
 [UNRELEASED] - Under development
 ********************************
 
+Added
+=====
+- Subscribed to ``"kytos/telemetry_int.enable_table"`` to support ``telemetry_int``
+
 Changed
 =======
 
