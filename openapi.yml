@@ -166,7 +166,8 @@ components:
                 items: 
                   type: string
                   enum:
-                    - base
+                    - epl
+                    - evpl
               mef_eline:
                 type: array
                 items: 
