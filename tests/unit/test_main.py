@@ -16,7 +16,6 @@ class TestMain:
         controller = get_controller_mock()
         self.napp = Main(controller)
         self.napp.controller.switches = {"00:00:00:00:00:00:00:01"}
-        self.api_client = get_test_client(controller, self.napp)
         self.base_endpoint = "kytos/of_multi_table/v1"
 
     async def test_get_enabled_table(self):
@@ -458,7 +457,12 @@ class TestMain:
                             {"instruction_type": "goto_table", "table_id": 1}
                         ],
                     },
-                    "napps_table_groups": {"of_lldp": ["base"]},
+                    "napps_table_groups": {
+                        "of_lldp": ["base"],
+                        "mef_eline": ["epl", "evpl"],
+                        "coloring": ["base"],
+                        "telemetry_int": ["epl", "evpl"],
+                    },
                 },
             ],
         }
