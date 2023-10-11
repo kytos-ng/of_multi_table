@@ -18,6 +18,26 @@ class TestMain:
         self.napp.controller.switches = {"00:00:00:00:00:00:00:01"}
         self.base_endpoint = "kytos/of_multi_table/v1"
 
+    def test_default_pipeline(self) -> None:
+        """Test default pipeline value.
+
+        This is to ensure that if settings.DEFAULT_PIPELINE changes
+        then it needs to be updated accordingly.
+        """
+        assert self.napp.default_pipeline == {
+            "multi_table": [
+                {
+                    "table_id": 0,
+                    "napps_table_groups": {
+                        "coloring": ["base"],
+                        "of_lldp": ["base"],
+                        "mef_eline": ["evpl", "epl"],
+                        "telemetry_int": ["evpl", "epl"],
+                    },
+                }
+            ]
+        }
+
     async def test_get_enabled_table(self):
         """Test get the enabled table"""
         controller = self.napp.pipeline_controller
