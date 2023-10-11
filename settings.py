@@ -13,7 +13,7 @@ DEFAULT_PIPELINE = {
                 "coloring": ["base"],
                 "of_lldp": ["base"],
                 "mef_eline": ["evpl", "epl"],
-                "telemetry_int": ["base"],
+                "telemetry_int": ["evpl", "epl"],
             },
         }
     ]
