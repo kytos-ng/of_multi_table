@@ -13,7 +13,18 @@ DEFAULT_PIPELINE = {
                 "coloring": ["base"],
                 "of_lldp": ["base"],
                 "mef_eline": ["evpl", "epl"],
-                "telemetry_int": ["evpl", "epl"],
+            },
+        },
+        {
+            "table_id": 2,
+            "napps_table_groups": {
+                "telemetry_int": ["evpl"],
+            },
+        },
+        {
+            "table_id": 3,
+            "napps_table_groups": {
+                "telemetry_int": ["epl"],
             },
         }
     ]
