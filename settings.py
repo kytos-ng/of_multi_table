@@ -26,7 +26,7 @@ DEFAULT_PIPELINE = {
             "napps_table_groups": {
                 "telemetry_int": ["epl"],
             },
-        }
+        },
     ]
 }
 
