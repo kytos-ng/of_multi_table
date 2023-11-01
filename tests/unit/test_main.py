@@ -72,13 +72,15 @@ class TestMain:
         }
         mock_content.return_value = content
         mock_napps.return_value = {"of_lldp"}
-        self.napp.load_pipeline(self.napp.default_pipeline)
+        self.napp.load_pipeline(self.napp.default_pipeline, 1)
 
         assert mock_content.call_count == 1
         assert mock_napps.call_count == 1
         assert self.napp.required_napps == {"of_lldp"}
         assert mock_enabling.call_count == 1
         assert mock_enabling.call_args[0][0] == content
+        assert mock_enabling.call_args[0][1] == 1
+        assert self.napp.controller.buffers.app.put.call_count == 1
 
     async def test_get_enabled_napps(self):
         """Test get the current enabled napps"""
@@ -117,8 +119,9 @@ class TestMain:
         self.napp.controller = MagicMock()
         controller = self.napp.controller
         name = "enable_table"
-        self.napp.emit_event(name)
+        self.napp.emit_event(name, event_timeout=2)
         assert controller.buffers.app.put.call_count == 1
+        assert controller.buffers.app.put.call_args[1] == {"timeout": 2}
 
     @patch("napps.kytos.of_multi_table.main.Main.get_flows_to_be_installed")
     async def test_handle_enable_table(self, mock_flows_to_be_installed):
