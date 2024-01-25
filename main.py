@@ -57,7 +57,7 @@ class Main(KytosNApp):
         self.subscribed_napps = SUBSCRIBED_NAPPS
         self.pipeline_controller = self.get_pipeline_controller()
         self.required_napps = set()
-        self.load_pipeline(self.get_enabled_table())
+        self.load_pipeline(self.get_enabled_table(), event_timeout=1)
 
     def execute(self):
         """Execute once when the napp is running."""
@@ -69,7 +69,7 @@ class Main(KytosNApp):
             return pipeline
         return self.default_pipeline
 
-    def load_pipeline(self, pipeline: dict):
+    def load_pipeline(self, pipeline: dict, event_timeout: Optional[float] = None):
         """If a pipeline was received, set 'self' variables"""
         found_napps = set()
         content = self.build_content(pipeline)
@@ -79,7 +79,7 @@ class Main(KytosNApp):
             if napp in enable_napps:
                 found_napps.add(napp)
         self.required_napps = found_napps
-        self.start_enabling_pipeline(content)
+        self.start_enabling_pipeline(content, event_timeout)
 
     def get_enabled_napps(self) -> set:
         """Get the NApps that are enabled and subscribed"""
@@ -90,13 +90,15 @@ class Main(KytosNApp):
                 enable_napps.add(key[1])
         return enable_napps
 
-    def start_enabling_pipeline(self, content: dict):
+    def start_enabling_pipeline(
+        self, content: dict, event_timeout: Optional[float] = None
+    ):
         """Method to start the process to enable table
         First, send event notifying NApps about their
         new table set up.
         """
         name = "enable_table"
-        self.emit_event(name, content)
+        self.emit_event(name, content, event_timeout)
 
     def build_content(self, pipeline: dict) -> dict:
         """Build content to be sent through an event"""
@@ -110,12 +112,14 @@ class Main(KytosNApp):
                     content[napp][flow_type] = table_id
         return content
 
-    def emit_event(self, name: str, content: dict = None):
+    def emit_event(
+        self, name: str, content: dict = None, event_timeout: Optional[float] = None
+    ):
         """Send event"""
         context = "kytos/of_multi_table"
         event_name = f"{context}.{name}"
         event = KytosEvent(name=event_name, content=content)
-        self.controller.buffers.app.put(event)
+        self.controller.buffers.app.put(event, timeout=event_timeout)
 
     @listen_to("kytos/(mef_eline|telemetry_int|coloring|of_lldp).enable_table")
     def on_enable_table(self, event):
