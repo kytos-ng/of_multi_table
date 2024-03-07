@@ -1,4 +1,5 @@
 """Tests for DB models"""
+
 import pytest
 from db.models import PipelineBaseDoc
 from pydantic import ValidationError

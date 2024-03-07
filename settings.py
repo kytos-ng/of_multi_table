@@ -1,4 +1,5 @@
 """Module with the Constants used in the kytos/of_multi_table."""
+
 FLOW_MANAGER_URL = "http://localhost:8181/api/kytos/flow_manager"
 COOKIE_PREFIX = 0xAD
 

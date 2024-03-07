@@ -1,8 +1,10 @@
 """Test the Main class"""
+
+import asyncio
 from unittest.mock import MagicMock, patch
 
 from napps.kytos.of_multi_table.main import Main
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from kytos.lib.helpers import get_controller_mock, get_test_client
 
@@ -475,9 +477,9 @@ class TestMain:
         self.napp.send_flows(flows, "install", True)
         assert self.napp.controller.buffers.app.put.call_count == 2
 
-    async def test_add_pipeline(self, event_loop):
+    async def test_add_pipeline(self):
         """Test adding a pipeline"""
-        self.napp.controller.loop = event_loop
+        self.napp.controller.loop = asyncio.get_running_loop()
         payload = {
             "status": "disabled",
             "multi_table": [
@@ -506,20 +508,22 @@ class TestMain:
         response = await api.post(url, json=payload)
         assert response.status_code == 201
 
-    async def test_add_pipeline_error_empty_json(self, event_loop):
+    async def test_add_pipeline_error_empty_json(self):
         """Test adding pipeline with an empty JSON"""
-        self.napp.controller.loop = event_loop
+        self.napp.controller.loop = asyncio.get_running_loop()
         payload = {"multi_table": [{"table_id": 299}]}
         controller = self.napp.pipeline_controller
-        controller.insert_pipeline.side_effect = ValidationError("", BaseModel)
+        controller.insert_pipeline.side_effect = ValidationError.from_exception_data(
+            "", []
+        )
         api = get_test_client(self.napp.controller, self.napp)
         url = f"{self.base_endpoint}/pipeline"
         response = await api.post(url, json=payload)
         assert response.status_code == 400
 
-    async def test_add_pipeline_error_empty_content(self, event_loop):
+    async def test_add_pipeline_error_empty_content(self):
         """Test adding pipeline with no content"""
-        self.napp.controller.loop = event_loop
+        self.napp.controller.loop = asyncio.get_running_loop()
         api = get_test_client(self.napp.controller, self.napp)
         url = f"{self.base_endpoint}/pipeline"
         response = await api.post(url)
