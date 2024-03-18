@@ -1,6 +1,9 @@
 [UNRELEASED] - Under development
 ********************************
 
+[2023.2.0] - 2024-02-16
+***********************
+
 Added
 =====
 - Subscribed to ``"kytos/telemetry_int.enable_table"`` to support ``telemetry_int``
