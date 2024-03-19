@@ -123,7 +123,7 @@ class MultitableDoc(BaseModel):
 class PipelineBaseDoc(DocumentBaseModel):
     """Base model for Pipeline documents"""
 
-    status: str = Field(default="disabled")
+    status: str = "disabled"
     multi_table: List[MultitableDoc]
 
     @field_validator("multi_table")
