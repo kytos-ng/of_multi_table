@@ -1,4 +1,5 @@
 """Defined status for pipeline"""
+
 from enum import Enum
 
 

@@ -2,6 +2,7 @@
 
 This NApp implements Oplenflow multi tables
 """
+
 # pylint: disable=unused-argument, too-many-arguments, too-many-public-methods
 # pylint: disable=attribute-defined-outside-init
 import pathlib

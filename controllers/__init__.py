@@ -1,4 +1,5 @@
 """PipelineController"""
+
 # pylint: disable=unnecessary-lambda,invalid-name,unnecessary-comprehension
 import os
 from datetime import datetime
@@ -51,7 +52,7 @@ class PipelineController:
                         "inserted_at": utc_now,
                         "updated_at": utc_now,
                     }
-                ).dict(exclude_none=True)
+                ).model_dump(exclude_none=True)
             )
         except ValidationError as err:
             raise err
