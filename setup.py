@@ -262,7 +262,7 @@ setup(
     author="kytos Team",
     author_email="of-ng-dev@ncc.unesp.br",
     license="MIT",
-    install_requires=read_requirements() + ['importlib_metadata'],
+    install_requires=read_requirements() + ["importlib_metadata"],
     packages=[],
     cmdclass={
         "clean": Cleaner,
