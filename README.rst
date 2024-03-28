@@ -18,6 +18,20 @@ This NApp implements Oplenflow multi tables
 
 If you are going to uninstall this NApp be sure to disable the current pipeline from database.
 
+Installing
+==========
+
+To install this NApp, first, make sure to have the same venv activated as you have ``kytos`` installed on:
+
+.. code:: shell
+
+   $ git clone https://github.com/kytos-ng/of_lldp.git
+   $ cd of_lldp
+   $ python3 -m pip install --editable .
+
+To install the kytos environment, please follow our
+`development environment setup <https://github.com/kytos-ng/documentation/blob/master/tutorials/napps/development_environment_setup.rst>`_.
+
 Requirements
 ============
 
