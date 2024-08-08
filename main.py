@@ -29,8 +29,6 @@ from kytos.core.retry import before_sleep
 
 from .controllers import PipelineController
 from .settings import (
-    BATCH_INTERVAL,
-    BATCH_SIZE,
     COOKIE_PREFIX,
     DEFAULT_PIPELINE,
     FLOW_MANAGER_URL,
@@ -322,28 +320,20 @@ class Main(KytosNApp):
                 install_flows[switch].append(flow)
         self.send_flows(install_flows, "install")
 
-    def send_flows(self, flows: Dict, action: str, force: bool = True):
+    def send_flows(self, flows_dict: Dict, action: str, force: bool = True):
         """Send flows to flow_manager through event"""
-        offset = BATCH_SIZE or None
-        while flows:
-            switch = list(flows.keys())
-            for dpid in switch:
-                if len(flows[dpid]) == 0:
-                    del flows[dpid]
-                    continue
-                name = f"kytos.flow_manager.flows.{action}"
-                content = {
-                    "dpid": dpid,
-                    "flow_dict": {"flows": flows[dpid][:offset]},
-                    "force": force,
-                }
-                event = KytosEvent(name=name, content=content)
-                self.controller.buffers.app.put(event)
-                if offset is None or offset >= len(flows[dpid]):
-                    del flows[dpid]
-                    continue
-                flows[dpid] = flows[dpid][offset:]
-            time.sleep(BATCH_INTERVAL)
+
+        for dpid, flows in flows_dict.items():
+            self.controller.buffers.app.put(
+                KytosEvent(
+                    name=f"kytos.flow_manager.flows.{action}",
+                    content={
+                        "dpid": dpid,
+                        "flow_dict": {"flows": flows},
+                        "force": force,
+                    }
+                )
+            )
 
     @staticmethod
     def get_pipeline_controller():
