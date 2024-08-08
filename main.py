@@ -331,7 +331,7 @@ class Main(KytosNApp):
                         "dpid": dpid,
                         "flow_dict": {"flows": flows},
                         "force": force,
-                    }
+                    },
                 )
             )
 

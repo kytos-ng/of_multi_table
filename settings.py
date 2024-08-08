@@ -30,4 +30,3 @@ DEFAULT_PIPELINE = {
         },
     ]
 }
-
