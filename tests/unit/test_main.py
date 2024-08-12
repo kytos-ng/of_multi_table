@@ -1,12 +1,14 @@
 """Test the Main class"""
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import call, MagicMock, patch
 
 from napps.kytos.of_multi_table.main import Main
 from pydantic import ValidationError
 
 from kytos.lib.helpers import get_controller_mock, get_test_client
+
+from kytos.core.events import KytosEvent
 
 
 class TestMain:
@@ -469,13 +471,17 @@ class TestMain:
         assert args[1] == "install"
 
     @patch("time.sleep", return_value=None)
-    @patch("napps.kytos.of_multi_table.main.BATCH_SIZE", 2)
     async def test_send_flows(self, _):
         """Test send flows"""
         self.napp.controller.buffers.app.put = MagicMock()
         flows = {"01": ["flow1", "flow2", "flow3"]}
         self.napp.send_flows(flows, "install", True)
-        assert self.napp.controller.buffers.app.put.call_count == 2
+        last_call = self.napp.controller.buffers.app.put.call_args
+        event = last_call.args[0]
+
+        assert event.name == "kytos.flow_manager.flows.install"
+        assert event.content["dpid"] == "01"
+        assert event.content["flow_dict"]["flows"] == ["flow1", "flow2", "flow3"]
 
     async def test_add_pipeline(self):
         """Test adding a pipeline"""
