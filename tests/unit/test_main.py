@@ -480,8 +480,8 @@ class TestMain:
         event = last_call.args[0]
 
         assert event.name == "kytos.flow_manager.flows.install"
-        assert event.content['dpid'] == '01'
-        assert event.content['flow_dict']['flows'] == ["flow1", "flow2", "flow3"]
+        assert event.content["dpid"] == "01"
+        assert event.content["flow_dict"]["flows"] == ["flow1", "flow2", "flow3"]
 
     async def test_add_pipeline(self):
         """Test adding a pipeline"""
