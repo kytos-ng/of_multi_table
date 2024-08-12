@@ -6,6 +6,10 @@ Changed
 - Updated python environment installation from 3.9 to 3.11
 - Updated test dependencies
 
+Removed
+=======
+- Removed client side batching with ``BATCH_INTERVAL`` and ``BATCH_SIZE``, now replaced with pacing in ``flow_manager``
+
 [2023.2.0] - 2024-02-16
 ***********************
 
