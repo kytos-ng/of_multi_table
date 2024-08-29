@@ -428,11 +428,13 @@ class TestMain:
                     "cookie": 999,
                     "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
                     "table_id": 0,
+                    "owner": "of_multi_table",
                 },
                 {
                     "cookie": 999,
                     "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
                     "table_id": 2,
+                    "owner": "of_multi_table",
                 },
             ]
         }
