@@ -1,6 +1,9 @@
 [UNRELEASED] - Under development
 ********************************
 
+[2024.1.1] - 2024-08-04
+***********************
+
 Changed
 =======
 - Included ``owner`` attribute when deleting flows
