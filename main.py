@@ -194,6 +194,7 @@ class Main(KytosNApp):
                         "cookie": flow["flow"].get("cookie"),
                         "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
                         "table_id": flow["flow"]["table_id"],
+                        "owner": owner,
                     }
                     if flow["flow"].get("match"):
                         delete["match"] = flow["flow"].get("match")
@@ -285,6 +286,7 @@ class Main(KytosNApp):
                     "cookie": cookie,
                     "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
                     "table_id": table_id,
+                    "owner": "of_multi_table",
                 }
 
                 delete_flows[switch].append(delete)
