@@ -131,10 +131,11 @@ class Main(KytosNApp):
         try:
             self.required_napps.remove(napp)
         except KeyError:
-            log.error(f"{napp} NApp loaded after pipeline was installed."
-                      " Flow inconsistencies may have appeared.")
+            log.error(
+                f"{napp} NApp loaded after pipeline was installed."
+                " Flow inconsistencies may have appeared."
+            )
             return
-        # 
         if self.required_napps:
             # There are more required napps, 'waiting' responses
             return
