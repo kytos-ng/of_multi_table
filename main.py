@@ -128,8 +128,13 @@ class Main(KytosNApp):
         """Handle NApps responses from enable_table
         Second, wait for all the napps to respond"""
         napp = event.name.split("/")[1].split(".")[0]
-        # Check against the last current table
-        self.required_napps.remove(napp)
+        try:
+            self.required_napps.remove(napp)
+        except KeyError:
+            log.error(f"{napp} NApp loaded after pipeline was installed."
+                      " Flow inconsistencies may have appeared.")
+            return
+        # 
         if self.required_napps:
             # There are more required napps, 'waiting' responses
             return
@@ -153,7 +158,7 @@ class Main(KytosNApp):
 
     def get_flows_to_be_installed(self):
         """Get flows from flow manager so this NApp can modify them
-        Third, install the flows with different table_id"""
+        and, install the flows with different table_id"""
         pipeline = self.pipeline_controller.get_active_pipeline()
         if not pipeline or pipeline.get("status") == "enabled":
             # Default or enabled pipeline, not need to get flows

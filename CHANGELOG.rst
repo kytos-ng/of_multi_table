@@ -1,5 +1,14 @@
+#########
+Changelog
+#########
+All notable changes to the of_multi_table NApp will be documented in this file.
+
 [UNRELEASED] - Under development
 ********************************
+
+Fixed
+=====
+- Fixed exception message when a Napp loads before ``of_multi_table``. Now it logs an ``ERROR`` message instead.
 
 [2024.1.1] - 2024-08-04
 ***********************
