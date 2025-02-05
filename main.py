@@ -132,8 +132,10 @@ class Main(KytosNApp):
             self.required_napps.remove(napp)
         except KeyError:
             log.error(
-                f"{napp} NApp loaded after pipeline was installed."
-                " Flow inconsistencies may have appeared."
+                f"{napp} NApp loaded after pipeline was installed. "
+                "Flow inconsistencies may have appeared. "
+                f"Try modifying `kytos.json` from {napp} then restart or 
+                redeploy the pipeline."
             )
             return
         if self.required_napps:
