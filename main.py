@@ -134,8 +134,8 @@ class Main(KytosNApp):
             log.error(
                 f"{napp} NApp loaded after pipeline was installed. "
                 "Flow inconsistencies may have appeared. "
-                f"Try modifying `kytos.json` from {napp} then restart or 
-                redeploy the pipeline."
+                f"Try modifying `kytos.json` from {napp} then restart or "
+                "redeploy the pipeline."
             )
             return
         if self.required_napps:
