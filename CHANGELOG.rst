@@ -6,6 +6,11 @@ All notable changes to the of_multi_table NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+[2025.2.0] - 2026-02-02
+***********************
+
+No major changes since the last release.
+
 [2025.1.0] - 2025-04-14
 ***********************
 
